@@ -1,0 +1,124 @@
+/* =================================================================
+ * VCP AdminPanel - Code IDE 主题 CSS 变量 (悬浮清透增强版)
+ * =================================================================
+ */
+
+/* =================================================================
+ * Light Theme: Code Light (代码浅色)
+ * 修复目标：提高纯净度，增强卡片悬浮感，拒绝“脏灰”
+ * =================================================================
+ */
+:root {
+  /* --- Wallpaper --- */
+  --chat-wallpaper: url('../assets/wallpaper/code-light.jpeg');
+
+  /* --- Base Colors --- */
+  --primary-bg: #f5f3ed;
+  --secondary-bg: #ffffff;
+  --tertiary-bg: #fafaf8;
+  --accent-bg: #e8e6e0;
+  
+  /* --- 面板半透明背景 (提高不透明度，保证阅读清晰度) --- */
+  --panel-bg: rgba(255, 255, 255, 0.88);
+  --sidebar-bg: rgba(255, 255, 255, 0.92);
+  --topbar-bg: rgba(255, 255, 255, 0.88);
+  --input-bg: rgba(245, 247, 250, 0.8);
+
+  /* --- Text Colors --- */
+  --text-primary: #2c3e50; /* 加深主字色 */
+  --text-regular: #4b6f85;
+  --text-secondary: #7f8c8d;
+  --text-placeholder: #bdc3c7;
+  --text-white: #ffffff;
+
+  /* --- UI Element Colors --- */
+  --primary-color: #4b6f85;
+  --primary-light: #6b8fa5;
+  --primary-dark: #3d5a6d;
+  --primary-opacity: rgba(75, 111, 133, 0.1);
+
+  --success-color: #50a14f;
+  --warning-color: #c18401;
+  --danger-color: #e45649;
+  --info-color: #9ca0a4;
+
+  /* --- Border & Shadows (重塑空间层级) --- */
+  --border-color: rgba(200, 204, 210, 0.8);
+  --border-light: rgba(220, 224, 230, 0.7);
+  --border-lighter: rgba(230, 234, 240, 0.5);
+  
+  --border-radius-sm: 6px;
+  --border-radius: 12px;
+  --border-radius-lg: 16px;
+
+  /* 强烈的弥散阴影，托起卡片 */
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.08);
+
+  /* --- Scrollbar --- */
+  --scrollbar-track: rgba(212, 210, 204, 0.2);
+  --scrollbar-thumb: rgba(75, 111, 133, 0.3);
+  --scrollbar-thumb-hover: rgba(75, 111, 133, 0.5);
+
+  /* --- Layout Constants --- */
+  --sidebar-width: 250px;
+  --sidebar-collapsed-width: 68px;
+  --topbar-height: 60px;
+  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* =================================================================
+ * Dark Theme: Code Dark (代码深色)
+ * 同样需要提高纯净度，避免黑乎乎糊成一片
+ * =================================================================
+ */
+[data-theme="dark"] {
+  /* --- Wallpaper --- */
+  --chat-wallpaper: url('../assets/wallpaper/code-dark.jpeg');
+
+  /* --- Base Colors --- */
+  --primary-bg: #1a1d23;
+  --secondary-bg: #252830;
+  --tertiary-bg: #1e2127;
+  --accent-bg: #2c313a;
+
+  /* --- 面板半透明背景 --- */
+  --panel-bg: rgba(33, 37, 43, 0.88);
+  --sidebar-bg: rgba(30, 34, 40, 0.95);
+  --topbar-bg: rgba(33, 37, 43, 0.88);
+  --input-bg: rgba(24, 26, 31, 0.8);
+
+  /* --- Text Colors --- */
+  --text-primary: #dcdfe4;
+  --text-regular: #abb2bf;
+  --text-secondary: #7f848e;
+  --text-placeholder: #5c6370;
+  --text-white: #1a1d23;
+
+  /* --- UI Element Colors --- */
+  --primary-color: #E5C07B;
+  --primary-light: #f3d69c;
+  --primary-dark: #d9b56f;
+  --primary-opacity: rgba(229, 192, 123, 0.12);
+
+  --success-color: #98c379;
+  --warning-color: #d19a66;
+  --danger-color: #e06c75;
+  --info-color: #586374;
+
+  /* --- Border & Shadows --- */
+  --border-color: rgba(62, 68, 81, 0.8);
+  --border-light: rgba(62, 68, 81, 0.5);
+  --border-lighter: rgba(62, 68, 81, 0.3);
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.5);
+
+  /* --- Scrollbar --- */
+  --scrollbar-track: rgba(30, 33, 39, 0.3);
+  --scrollbar-thumb: rgba(229, 192, 123, 0.2);
+  --scrollbar-thumb-hover: rgba(229, 192, 123, 0.4);
+}

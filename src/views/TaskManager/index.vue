@@ -1,83 +1,99 @@
 <template>
-  <div class="task-manager-page">
-    <Dashboard />
-    <LongTermPanel />
-    <ToolBar @create="openCreateDialog" />
-    
-    <!-- 过滤与搜索区可以整合进 ToolBar，或者为了总列表在此处加一个快捷过滤器 -->
-    <div class="view-container" v-loading="store.isLoading">
-      <!-- 总列表视图 (AllTasksView)，与看板视图切换使用 -->
-      <component :is="viewComponent" @open-detail="openDetailDrawer" />
+  <div class="task-manager-layout">
+    <!-- 极光呼吸背景层 -->
+    <div class="aurora-layer">
+      <div class="aurora-blob blob-1"></div>
+      <div class="aurora-blob blob-2"></div>
+      <div class="aurora-blob blob-3"></div>
     </div>
 
-    <TaskCreateDialog ref="createDialogRef" />
-    <DetailDrawer ref="detailDrawerRef" />
+    <!-- 主工作区：顶栏已合并至全局，此处专注渲染主体 -->
+    <div class="main-workspace">
+      <Transition name="fade" mode="out-in">
+        <component :is="currentViewComponent" />
+      </Transition>
+    </div>
+
+    <!-- 全局悬浮球 Inbox：改为 fixed 定位，绝不乱跑 -->
+    <InboxFab />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { useTaskStore } from '@/stores/taskStore';
-import Dashboard from './components/Dashboard.vue';
-import LongTermPanel from './components/LongTermPanel.vue';
-import ToolBar from './components/ToolBar.vue';
-import TableView from './components/views/TableView.vue';
-import KanbanView from './components/views/KanbanView.vue';
-import AllTasksView from './components/views/AllTasksView.vue'; // 我们稍后新建这个视图
-import TaskCreateDialog from './components/TaskCreateDialog.vue';
-import DetailDrawer from './components/shared/DetailDrawer.vue';
-import type { ITaskItem } from '@/types/task';
+import { computed, defineAsyncComponent } from 'vue'
+import { useTaskStore } from '@/stores/taskStore'
+import InboxFab from './components/InboxFab.vue'
 
-const store = useTaskStore();
-const createDialogRef = ref();
-const detailDrawerRef = ref();
+const store = useTaskStore()
 
-const openCreateDialog = () => {
-  createDialogRef.value?.open();
-};
+const TodayBoard = defineAsyncComponent(() => import('./TodayBoard.vue'))
+const PlanningCenter = defineAsyncComponent(() => import('./PlanningCenter.vue'))
+const ReviewRitual = defineAsyncComponent(() => import('./ReviewRitual.vue'))
 
-const openDetailDrawer = (task: ITaskItem) => {
-  detailDrawerRef.value?.open(task);
-};
-
-const viewComponent = computed(() => {
-  if (store.currentView === 'kanban') return KanbanView;
-  if (store.currentView === 'all_list') return AllTasksView;
-  return TableView; // 默认或者其他的列表视图
-});
-
-onMounted(() => {
-  store.loadTasks();
-});
+// 直接监听 Store 中的全局视图状态
+const currentViewComponent = computed(() => {
+  switch (store.currentView) {
+    case 'today': return TodayBoard
+    case 'planning': return PlanningCenter
+    case 'review': return ReviewRitual
+    default: return TodayBoard
+  }
+})
 </script>
 
 <style scoped>
-.task-manager-page {
-  padding: 20px;
-  height: 100%;
-  box-sizing: border-box;
+.task-manager-layout {
+  width: 100%;
+  height: 100vh;
   display: flex;
   flex-direction: column;
-  overflow-y: auto; /* 给整个任务管理页面添加上下滚动条 */
+  background: var(--vcp-bg-body, #FCFBF7);
+  overflow: hidden;
+  position: relative;
+  transition: background-color 0.4s ease;
+  /* 为全局 Sticky 顶栏留出一点呼吸空间 */
+  padding-top: 12px; 
 }
 
-/* 美化整个页面的滚动条 */
-.task-manager-page::-webkit-scrollbar {
-  width: 8px;
+/* 极光呼吸背景层 */
+.aurora-layer {
+  position: absolute; inset: 0; pointer-events: none; z-index: 0; overflow: hidden;
 }
-.task-manager-page::-webkit-scrollbar-track {
-  background: transparent;
-}
-.task-manager-page::-webkit-scrollbar-thumb {
-  background-color: #E0E0E0;
-  border-radius: 10px;
-}
-.task-manager-page::-webkit-scrollbar-thumb:hover {
-  background-color: #C5C5C5;
+.aurora-blob {
+  position: absolute; border-radius: 50%; filter: blur(80px);
+  will-change: transform; transition: background 0.5s ease;
 }
 
-.view-container {
-  flex: 1;
-  overflow: visible; /* 改为 visible 允许内容撑开页面 */
+.blob-1 {
+  top: -15%; left: -10%; width: 45%; height: 50%;
+  background: radial-gradient(ellipse, rgba(245, 158, 11, 0.15) 0%, transparent 70%);
+  animation: aurora-drift-1 14s ease-in-out infinite alternate;
 }
+.blob-2 {
+  top: -10%; right: -15%; width: 40%; height: 45%;
+  background: radial-gradient(ellipse, rgba(244, 63, 94, 0.12) 0%, transparent 70%);
+  animation: aurora-drift-2 16s ease-in-out infinite alternate;
+}
+.blob-3 {
+  bottom: -20%; left: 15%; width: 35%; height: 40%;
+  background: radial-gradient(ellipse, rgba(16, 185, 129, 0.12) 0%, transparent 70%);
+  animation: aurora-drift-1 20s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes aurora-drift-1 { 0% { transform: translate(0, 0) scale(1); } 100% { transform: translate(4%, 3%) scale(1.05); } }
+@keyframes aurora-drift-2 { 0% { transform: translate(0, 0) scale(1); } 100% { transform: translate(-3%, 4%) scale(1.03); } }
+
+[data-theme='dark'] .blob-1 { background: radial-gradient(ellipse, rgba(14, 165, 233, 0.20) 0%, transparent 70%); }
+[data-theme='dark'] .blob-2 { background: radial-gradient(ellipse, rgba(139, 92, 246, 0.15) 0%, transparent 70%); }
+[data-theme='dark'] .blob-3 { background: radial-gradient(ellipse, rgba(16, 185, 129, 0.12) 0%, transparent 70%); }
+
+.main-workspace {
+  flex: 1; position: relative; overflow: hidden; z-index: 1;
+}
+
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.fade-enter-from { opacity: 0; transform: translateY(10px); }
+.fade-leave-to { opacity: 0; transform: translateY(-10px); }
 </style>

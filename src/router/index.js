@@ -5,8 +5,17 @@ const routes = [
     path: '/',
     component: () => import('@/components/layout/AppLayout.vue'),
     children: [
-      { path: '', redirect: '/task-manager' },
-      { path: 'task-manager', name: 'TaskManager', component: () => import('@/views/TaskManager/index.vue'), meta: { title: '任务管理', icon: 'Finished' } }
+      { path: '', redirect: '/task-manager/today' },
+      {
+        path: 'task-manager',
+        component: () => import('@/views/TaskManager/index.vue'),
+        children: [
+          { path: '', redirect: '/task-manager/today' },
+          { path: 'today', name: 'TodayBoard', component: () => import('@/views/TaskManager/TodayBoard.vue'), meta: { title: '今日无垠' } },
+          { path: 'planning', name: 'PlanningCenter', component: () => import('@/views/TaskManager/PlanningCenter.vue'), meta: { title: '排期中心' } },
+          { path: 'review', name: 'ReviewRitual', component: () => import('@/views/TaskManager/ReviewRitual.vue'), meta: { title: '复习仪式' } }
+        ]
+      }
     ]
   }
 ]
@@ -16,14 +25,8 @@ const router = createRouter({
   routes
 })
 
-// 已取消前端登录鉴权，直接放行所有路由
-router.beforeEach((to, from, next) => {
-  next()
-})
-
-// 全局后置守卫 - 更新页面标题
-router.afterEach((to) => {
-  document.title = `${to.meta.title || 'TaskOrbit'} - TaskOrbit 任务中枢`
+router.afterEach(to => {
+  document.title = `${to.meta.title || 'TaskOrbit'} - TaskOrbit`
 })
 
 export default router

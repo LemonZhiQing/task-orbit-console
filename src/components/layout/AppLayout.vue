@@ -1,57 +1,40 @@
 <template>
-  <div class="app-layout">
-    <!-- 侧边栏 -->
-    <Sidebar />
-
-    <!-- 主内容区 -->
-    <div class="main-area" :class="{ 'sidebar-collapsed': appStore.sidebarCollapsed }">
-      <!-- 顶栏 -->
-      <TopBar />
-
-      <!-- 页面内容 -->
-      <main class="page-content">
-        <router-view v-slot="{ Component }">
-          <transition name="fade-slide" mode="out-in">
-            <component :is="Component" />
-          </transition>
-        </router-view>
-      </main>
-    </div>
+  <div class="shell-layout">
+    <TopBar />
+    <main class="shell-main">
+      <router-view v-slot="{ Component }">
+        <transition name="fade-slide" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
+    </main>
   </div>
 </template>
 
 <script setup>
-import Sidebar from './Sidebar.vue'
 import TopBar from './TopBar.vue'
-import { useAppStore } from '@/stores/app'
-
-const appStore = useAppStore()
 </script>
 
 <style scoped>
-.app-layout {
-  display: flex;
-  height: 100vh;
-  overflow: hidden;
+.shell-layout {
+  min-height: 100vh;
+  background: var(--bg-main);
 }
 
-.main-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  margin-left: var(--sidebar-width);
-  transition: margin-left var(--transition-normal);
-  overflow: hidden;
+.shell-main {
+  max-width: var(--page-width);
+  margin: 0 auto;
+  padding: 20px 24px 32px;
 }
 
-.main-area.sidebar-collapsed {
-  margin-left: var(--sidebar-collapsed-width);
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all var(--transition-normal);
 }
 
-.page-content {
-  flex: 1;
-  padding: var(--spacing-lg);
-  overflow-y: auto;
-  background-color: var(--bg-color);
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
 }
 </style>

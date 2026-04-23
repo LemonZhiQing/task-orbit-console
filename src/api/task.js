@@ -17,6 +17,10 @@ export const taskApi = {
         return api.patch(`/tasks/${id}`, data)
     },
 
+    batchUpdateTasks(tasks) {
+        return api.post('/tasks/batch', { tasks })
+    },
+
     deleteTask(id) {
         return api.delete(`/tasks/${id}`)
     },
@@ -27,5 +31,10 @@ export const taskApi = {
 
     openLocal(filePath) {
         return api.post('/tasks/open-local', { filePath })
+    },
+    
+    // V4.0 新增：获取活期父级项目候选人
+    getParentCandidates(period) {
+        return api.get(`/tasks/parent-candidates?period=${period}`)
     }
 }

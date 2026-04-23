@@ -1,124 +1,99 @@
-/* =================================================================
- * VCP AdminPanel - Code IDE 主题 CSS 变量 (悬浮清透增强版)
- * =================================================================
- */
-
-/* =================================================================
- * Light Theme: Code Light (代码浅色)
- * 修复目标：提高纯净度，增强卡片悬浮感，拒绝“脏灰”
- * =================================================================
- */
+/* 涓夊涓€鐞冩姢鐪间富棰樺彉閲?*/
 :root {
-  /* --- Wallpaper --- */
-  --chat-wallpaper: url('../assets/wallpaper/code-light.jpeg');
+  /* 原全局变量保持不变，以免影响其他老页面 */
+  --bg-main: #FFFEF5;
+  --bg-card: #FFFFFF;
+  --text-main: #2F2F2F;
+  --text-muted: #7d766d;
+  --text-soft: #9d9489;
+  --color-primary: #4A9D9A;
+  --color-primary-soft: rgba(74, 157, 154, 0.12);
+  --color-todo: #8B7355;
+  --color-doing: #4682B4;
+  --color-done: #7DA27B;
+  --color-border: rgba(47, 47, 47, 0.08);
+  --shadow-paper: 0 2px 10px rgba(0, 0, 0, 0.03);
+  --radius-sm: 12px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
+  --topbar-height: 72px;
+  --page-width: 1320px;
+  --transition-fast: 0.18s ease;
+  --transition-normal: 0.28s ease;
 
-  /* --- Base Colors --- */
-  --primary-bg: #f5f3ed;
-  --secondary-bg: #ffffff;
-  --tertiary-bg: #fafaf8;
-  --accent-bg: #e8e6e0;
+  /* ☀️ TaskOrbit V4 专属变量：全面向“暖阳纸质”护眼态切换 */
+  --vcp-bg-body: #FCFBF7;    /* 极柔和的米纸色，吸收蓝光 */
+  --vcp-bg-column: #F5F4EE;  /* 浅暖灰底槽，比页面底色稍微深一点点，制造立体感 */
+  --vcp-bg-card: #FFFFFF;    /* 纯白卡片，保持清透 */
   
-  /* --- 面板半透明背景 (提高不透明度，保证阅读清晰度) --- */
-  --panel-bg: rgba(255, 255, 255, 0.88);
-  --sidebar-bg: rgba(255, 255, 255, 0.92);
-  --topbar-bg: rgba(255, 255, 255, 0.88);
-  --input-bg: rgba(245, 247, 250, 0.8);
-
-  /* --- Text Colors --- */
-  --text-primary: #2c3e50; /* 加深主字色 */
-  --text-regular: #4b6f85;
-  --text-secondary: #7f8c8d;
-  --text-placeholder: #bdc3c7;
-  --text-white: #ffffff;
-
-  /* --- UI Element Colors --- */
-  --primary-color: #4b6f85;
-  --primary-light: #6b8fa5;
-  --primary-dark: #3d5a6d;
-  --primary-opacity: rgba(75, 111, 133, 0.1);
-
-  --success-color: #50a14f;
-  --warning-color: #c18401;
-  --danger-color: #e45649;
-  --info-color: #9ca0a4;
-
-  /* --- Border & Shadows (重塑空间层级) --- */
-  --border-color: rgba(200, 204, 210, 0.8);
-  --border-light: rgba(220, 224, 230, 0.7);
-  --border-lighter: rgba(230, 234, 240, 0.5);
+  --vcp-text-main: #3E3A36;  /* 浓缩咖啡色（深暖咖），替代刺眼的纯黑/深蓝，降低对比度疲劳 */
+  --vcp-text-sub: #8C847A;   /* 暖棕灰辅助文字，极其温柔 */
   
-  --border-radius-sm: 6px;
-  --border-radius: 12px;
-  --border-radius-lg: 16px;
+  /* 阴影调暖，去除生硬的冷黑阴影，加入一丝环境光的暖黄色调 */
+  --vcp-shadow-card: 0 1px 3px rgba(62, 58, 54, 0.04), 0 1px 2px rgba(62, 58, 54, 0.02);
+  --vcp-shadow-hover: 0 4px 10px rgba(62, 58, 54, 0.06), 0 2px 4px rgba(62, 58, 54, 0.03);
 
-  /* 强烈的弥散阴影，托起卡片 */
-  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.08);
-
-  /* --- Scrollbar --- */
-  --scrollbar-track: rgba(212, 210, 204, 0.2);
-  --scrollbar-thumb: rgba(75, 111, 133, 0.3);
-  --scrollbar-thumb-hover: rgba(75, 111, 133, 0.5);
-
-  /* --- Layout Constants --- */
-  --sidebar-width: 250px;
-  --sidebar-collapsed-width: 68px;
-  --topbar-height: 60px;
-  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --el-color-primary: var(--color-primary);
+  --el-bg-color: var(--bg-card);
+  --el-bg-color-page: var(--bg-main);
+  --el-bg-color-overlay: var(--bg-card);
+  --el-text-color-primary: var(--text-main);
+  --el-text-color-regular: var(--text-main);
+  --el-text-color-secondary: var(--text-muted);
+  --el-text-color-placeholder: var(--text-soft);
+  --el-border-color: var(--color-border);
+  --el-border-color-light: var(--color-border);
+  --el-border-radius-base: var(--radius-sm);
 }
 
-/* =================================================================
- * Dark Theme: Code Dark (代码深色)
- * 同样需要提高纯净度，避免黑乎乎糊成一片
- * =================================================================
- */
-[data-theme="dark"] {
-  /* --- Wallpaper --- */
-  --chat-wallpaper: url('../assets/wallpaper/code-dark.jpeg');
+[data-theme='dark'] {
+  --bg-main: #1f2321;
+  --bg-card: #262b28;
+  --text-main: #eef1ed;
+  --text-muted: #bcc6bf;
+  --text-soft: #8d9890;
+  --color-primary: #75b9b5;
+  --color-primary-soft: rgba(117, 185, 181, 0.14);
+  --color-todo: #b49a7b;
+  --color-doing: #74a6d1;
+  --color-done: #8ab487;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --shadow-paper: 0 2px 10px rgba(0, 0, 0, 0.16);
 
-  /* --- Base Colors --- */
-  --primary-bg: #1a1d23;
-  --secondary-bg: #252830;
-  --tertiary-bg: #1e2127;
-  --accent-bg: #2c313a;
+  /* 🌙 深色模式保持深空蓝，更利于暗环境下的视线聚焦，不易散光 */
+  --vcp-bg-body: #0F172A;
+  --vcp-bg-column: #1E293B;
+  --vcp-bg-card: #111827;
+  --vcp-text-main: #E2E8F0;
+  --vcp-text-sub: #94A3B8;
+  --vcp-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.25), 0 1px 2px rgba(0, 0, 0, 0.18);
+  --vcp-shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.28), 0 4px 6px -4px rgba(0, 0, 0, 0.24); 
 
-  /* --- 面板半透明背景 --- */
-  --panel-bg: rgba(33, 37, 43, 0.88);
-  --sidebar-bg: rgba(30, 34, 40, 0.95);
-  --topbar-bg: rgba(33, 37, 43, 0.88);
-  --input-bg: rgba(24, 26, 31, 0.8);
+  --el-bg-color: var(--bg-card);
+  --el-bg-color-page: var(--bg-main);
+  --el-bg-color-overlay: var(--bg-card);
+  --el-text-color-primary: var(--text-main);
+  --el-text-color-regular: var(--text-main);
+  --el-text-color-secondary: var(--text-muted);
+  --el-text-color-placeholder: var(--text-soft);
+  --el-border-color: var(--color-border);
+  --el-border-color-light: var(--color-border);
+}
 
-  /* --- Text Colors --- */
-  --text-primary: #dcdfe4;
-  --text-regular: #abb2bf;
-  --text-secondary: #7f848e;
-  --text-placeholder: #5c6370;
-  --text-white: #1a1d23;
+.task-card-v4 {
+  background: var(--vcp-bg-card);
+  /* 边框色变暖，且变得极其微弱 */
+  border: 1px solid rgba(62, 58, 54, 0.06);
+  border-radius: 8px;
+  box-shadow: var(--vcp-shadow-card);
+  transition: all 0.2s ease;
+}
 
-  /* --- UI Element Colors --- */
-  --primary-color: #E5C07B;
-  --primary-light: #f3d69c;
-  --primary-dark: #d9b56f;
-  --primary-opacity: rgba(229, 192, 123, 0.12);
+[data-theme='dark'] .task-card-v4 {
+  border-color: rgba(255, 255, 255, 0.08);
+}
 
-  --success-color: #98c379;
-  --warning-color: #d19a66;
-  --danger-color: #e06c75;
-  --info-color: #586374;
-
-  /* --- Border & Shadows --- */
-  --border-color: rgba(62, 68, 81, 0.8);
-  --border-light: rgba(62, 68, 81, 0.5);
-  --border-lighter: rgba(62, 68, 81, 0.3);
-
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.5);
-
-  /* --- Scrollbar --- */
-  --scrollbar-track: rgba(30, 33, 39, 0.3);
-  --scrollbar-thumb: rgba(229, 192, 123, 0.2);
-  --scrollbar-thumb-hover: rgba(229, 192, 123, 0.4);
+.task-card-v4:hover {
+  box-shadow: var(--vcp-shadow-hover);
+  transform: translateY(-2px);
 }

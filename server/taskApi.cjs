@@ -33,11 +33,7 @@ function normalizeLocalFilePath(filePath) {
 router.get('/', async (req, res) => {
     try {
         const tasks = await taskDb.getAllTasks();
-        res.json({
-            success: true,
-            data: tasks,
-            message: 'Tasks retrieved successfully'
-        });
+        res.json({ success: true, data: tasks, message: 'Tasks retrieved successfully' });
     } catch (error) {
         console.error('Error fetching tasks:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
@@ -47,13 +43,23 @@ router.get('/', async (req, res) => {
 router.get('/stats', async (req, res) => {
     try {
         const stats = await taskDb.getTaskStats();
-        res.json({
-            success: true,
-            data: stats,
-            message: 'Task stats retrieved successfully'
-        });
+        res.json({ success: true, data: stats, message: 'Task stats retrieved successfully' });
     } catch (error) {
         console.error('Error fetching task stats:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
+router.get('/parent-candidates', async (req, res) => {
+    try {
+        const period = req.query.period;
+        if (!period) {
+            return res.status(400).json({ success: false, message: 'Missing query parameter: period' });
+        }
+        const candidates = await taskDb.getParentCandidates(period);
+        res.json({ success: true, data: candidates, message: 'Parent candidates retrieved successfully' });
+    } catch (error) {
+        console.error('Error fetching parent candidates:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
     }
 });
@@ -65,11 +71,7 @@ router.get('/:id', async (req, res) => {
             return res.status(404).json({ success: false, message: 'Task not found' });
         }
 
-        res.json({
-            success: true,
-            data: task,
-            message: 'Task retrieved successfully'
-        });
+        res.json({ success: true, data: task, message: 'Task retrieved successfully' });
     } catch (error) {
         console.error(`Error fetching task ${req.params.id}:`, error);
         res.status(500).json({ success: false, message: 'Internal server error' });
@@ -84,11 +86,7 @@ router.post('/', async (req, res) => {
         }
 
         const createdTask = await taskDb.insertTask(taskData);
-        res.status(201).json({
-            success: true,
-            data: createdTask,
-            message: 'Task created successfully'
-        });
+        res.status(201).json({ success: true, data: createdTask, message: 'Task created successfully' });
     } catch (error) {
         console.error('Error creating task:', error);
         if (String(error.message || '').includes('UNIQUE')) {
@@ -98,14 +96,21 @@ router.post('/', async (req, res) => {
     }
 });
 
+router.post('/batch', async (req, res) => {
+    try {
+        const tasks = Array.isArray(req.body?.tasks) ? req.body.tasks : [];
+        const savedTasks = await taskDb.replaceAllTasks(tasks);
+        res.json({ success: true, data: savedTasks, message: 'Tasks synced successfully' });
+    } catch (error) {
+        console.error('Error syncing tasks:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
 router.patch('/:id', async (req, res) => {
     try {
         const updatedTask = await taskDb.updateTask(req.params.id, req.body || {});
-        res.json({
-            success: true,
-            data: updatedTask,
-            message: 'Task updated successfully'
-        });
+        res.json({ success: true, data: updatedTask, message: 'Task updated successfully' });
     } catch (error) {
         console.error(`Error updating task ${req.params.id}:`, error);
         if (String(error.message || '').includes('Task not found')) {
@@ -118,11 +123,7 @@ router.patch('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
     try {
         const deletedTask = await taskDb.deleteTask(req.params.id);
-        res.json({
-            success: true,
-            data: deletedTask,
-            message: 'Task deleted successfully'
-        });
+        res.json({ success: true, data: deletedTask, message: 'Task deleted successfully' });
     } catch (error) {
         console.error(`Error deleting task ${req.params.id}:`, error);
         if (String(error.message || '').includes('Task not found')) {
@@ -144,11 +145,7 @@ router.post('/open-local', async (req, res) => {
                 return res.status(500).json({ success: false, message: `打开文件失败: ${error.message}` });
             }
 
-            res.json({
-                success: true,
-                data: { path: localPath },
-                message: '文件打开指令已发送'
-            });
+            res.json({ success: true, data: { path: localPath }, message: '文件打开指令已发送' });
         });
     } catch (error) {
         console.error('Error opening local file:', error);

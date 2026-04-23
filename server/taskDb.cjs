@@ -21,22 +21,60 @@ function initDb() {
     CREATE TABLE IF NOT EXISTS tasks (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
-      status TEXT DEFAULT 'todo',
-      plan_date TEXT,
-      project TEXT,
-      priority TEXT,
-      progress INTEGER DEFAULT 0,
-      next_review_date TEXT,
-      properties_json TEXT,
-      ai_meta_json TEXT,
-      knowledge_refs_json TEXT,
+      period TEXT DEFAULT 'daily',
+      kanban_col TEXT DEFAULT 'todo',
+      priority TEXT DEFAULT 'p2',
+      is_focused INTEGER DEFAULT 0,
       memo TEXT,
+      is_review INTEGER DEFAULT 0,
+      project TEXT,
+      plan_date INTEGER,
+      due_date INTEGER,
+      planned_pomodoros INTEGER DEFAULT 0,
+      actual_pomodoros INTEGER DEFAULT 0,
+      planned_amount REAL DEFAULT 0,
+      completed_amount REAL DEFAULT 0,
+      unit TEXT,
+      tags_json TEXT DEFAULT '[]',
+      creator_agent TEXT,
+      review_meta_json TEXT DEFAULT '{}',
+      knowledge_refs_json TEXT, 
       created_at TEXT,
       updated_at TEXT
     );
   `;
 
     db.exec(createTableQuery);
+
+    const columns = db.prepare("PRAGMA table_info(tasks)").all().map(column => column.name);    
+    const migrations = [
+        ['period', "ALTER TABLE tasks ADD COLUMN period TEXT DEFAULT 'daily'"],
+        ['kanban_col', "ALTER TABLE tasks ADD COLUMN kanban_col TEXT DEFAULT 'todo'"],
+        ['is_focused', "ALTER TABLE tasks ADD COLUMN is_focused INTEGER DEFAULT 0"],
+        ['is_review', "ALTER TABLE tasks ADD COLUMN is_review INTEGER DEFAULT 0"],
+        ['knowledge_refs_json', "ALTER TABLE tasks ADD COLUMN knowledge_refs_json TEXT DEFAULT '[]'"],
+        ['created_at', "ALTER TABLE tasks ADD COLUMN created_at TEXT"],
+        ['updated_at', "ALTER TABLE tasks ADD COLUMN updated_at TEXT"],
+        
+        ['priority', "ALTER TABLE tasks ADD COLUMN priority TEXT DEFAULT 'p2'"],
+        ['project', "ALTER TABLE tasks ADD COLUMN project TEXT"],
+        ['plan_date', "ALTER TABLE tasks ADD COLUMN plan_date INTEGER"],
+        ['due_date', "ALTER TABLE tasks ADD COLUMN due_date INTEGER"],
+        ['planned_pomodoros', "ALTER TABLE tasks ADD COLUMN planned_pomodoros INTEGER DEFAULT 0"],
+        ['actual_pomodoros', "ALTER TABLE tasks ADD COLUMN actual_pomodoros INTEGER DEFAULT 0"],
+        ['planned_amount', "ALTER TABLE tasks ADD COLUMN planned_amount REAL DEFAULT 0"],
+        ['completed_amount', "ALTER TABLE tasks ADD COLUMN completed_amount REAL DEFAULT 0"],
+        ['unit', "ALTER TABLE tasks ADD COLUMN unit TEXT"],
+        ['tags_json', "ALTER TABLE tasks ADD COLUMN tags_json TEXT DEFAULT '[]'"],
+        ['creator_agent', "ALTER TABLE tasks ADD COLUMN creator_agent TEXT"],
+        ['review_meta_json', "ALTER TABLE tasks ADD COLUMN review_meta_json TEXT DEFAULT '{}'"]
+    ];
+
+    for (const [name, sql] of migrations) {
+        if (!columns.includes(name)) {
+            db.exec(sql);
+        }
+    }
 }
 
 function safeParseJSON(value, fallback) {
@@ -47,111 +85,124 @@ function safeParseJSON(value, fallback) {
     }
 }
 
-function isPlainObject(value) {
-    return Object.prototype.toString.call(value) === '[object Object]';
-}
-
-function deepMerge(base, patch) {
-    if (patch === undefined) return base;
-    if (Array.isArray(base) || Array.isArray(patch)) {
-        return patch;
-    }
-    if (!isPlainObject(base) || !isPlainObject(patch)) {
-        return patch;
-    }
-
-    const merged = { ...base };
-    for (const [key, value] of Object.entries(patch)) {
-        merged[key] = key in base ? deepMerge(base[key], value) : value;
-    }
-    return merged;
-}
-
-function normalizeKnowledgeRefs(value) {
-    const normalized = isPlainObject(value) ? { ...value } : {};
-    normalized.tags = Array.isArray(normalized.tags) ? normalized.tags : [];
-    normalized.diary_ids = Array.isArray(normalized.diary_ids) ? normalized.diary_ids : [];
-    normalized.external_urls = Array.isArray(normalized.external_urls) ? normalized.external_urls : [];
-    return normalized;
-}
-
-function serializeTask(task) {
-    const properties = isPlainObject(task.properties) ? task.properties : {};
-    const aiMeta = isPlainObject(task.ai_meta) ? task.ai_meta : {};
-    const reviewInfo = isPlainObject(aiMeta.review_info) ? aiMeta.review_info : {};
-    const knowledgeRefs = normalizeKnowledgeRefs(task.knowledge_refs);
+function normalizeTask(task) {
     const now = new Date().toISOString();
-    const progress = Number(aiMeta.progress ?? 0);
+    
+    const reviewMeta = {
+        knowledge_tags: Array.isArray(task.knowledge_tags) ? task.knowledge_tags : [],
+        external_urls: Array.isArray(task.external_urls) ? task.external_urls : [],
+        review_info: task.review_info || null
+    };
 
     return {
-        id: task.id,
-        title: task.title,
-        status: properties.status || 'todo',
-        plan_date: properties.plan_date || null,
-        project: properties.project || null,
-        priority: properties.priority || null,
-        progress: Number.isFinite(progress) ? progress : 0,
-        next_review_date: reviewInfo.next_review_date || null,
-        properties_json: JSON.stringify(properties),
-        ai_meta_json: JSON.stringify(aiMeta),
-        knowledge_refs_json: JSON.stringify(knowledgeRefs),
+        id: String(task.id || ''),
+        title: String(task.title || '未命名任务'),
+        period: typeof task.period === 'string' ? task.period : 'daily',
+        kanban_col: typeof task.kanban_col === 'string' ? task.kanban_col : 'todo',
+        priority: typeof task.priority === 'string' ? task.priority : 'p2',
+        
+        is_focused: Boolean(task.is_focused),
         memo: typeof task.memo === 'string' ? task.memo : '',
+        is_review: Boolean(task.is_review),
+        
+        project: task.project ? String(task.project) : null,
+        plan_date: task.plan_date ? Number(task.plan_date) : null,
+        due_date: task.due_date ? Number(task.due_date) : null,
+        planned_pomodoros: Number(task.planned_pomodoros) || 0,
+        actual_pomodoros: Number(task.actual_pomodoros) || 0,
+        planned_amount: Number(task.planned_amount) || 0,
+        completed_amount: Number(task.completed_amount) || 0,
+        unit: task.unit ? String(task.unit) : null,
+        tags: Array.isArray(task.tags) ? task.tags : [],
+        creator_agent: task.creator_agent ? String(task.creator_agent) : null,
+        
+        review_meta: reviewMeta,
+        
         created_at: task.created_at || now,
         updated_at: task.updated_at || now
     };
 }
 
-function deserializeTask(row) {
-    if (!row) return null;
-
-    const properties = safeParseJSON(row.properties_json, {});
-    const ai_meta = safeParseJSON(row.ai_meta_json, {});
-    const knowledge_refs = normalizeKnowledgeRefs(safeParseJSON(row.knowledge_refs_json, {}));
-
-    properties.status = row.status || properties.status || 'todo';
-    properties.plan_date = row.plan_date ?? properties.plan_date ?? '';
-    properties.project = row.project ?? properties.project ?? '';
-    properties.priority = row.priority ?? properties.priority ?? 'P2';
-
-    ai_meta.progress = Number.isFinite(Number(row.progress)) ? Number(row.progress) : Number(ai_meta.progress || 0);
-    if (row.next_review_date) {
-        ai_meta.review_info = isPlainObject(ai_meta.review_info) ? ai_meta.review_info : {};
-        ai_meta.review_info.next_review_date = row.next_review_date;
-    }
-
+function serializeTask(task) {
+    const normalized = normalizeTask(task);
     return {
-        id: row.id,
-        title: row.title,
-        properties,
-        ai_meta,
-        knowledge_refs,
-        memo: row.memo || '',
-        created_at: row.created_at,
-        updated_at: row.updated_at
+        ...normalized,
+        is_focused: normalized.is_focused ? 1 : 0,
+        is_review: normalized.is_review ? 1 : 0,
+        tags_json: JSON.stringify(normalized.tags),
+        review_meta_json: JSON.stringify(normalized.review_meta)
     };
 }
 
+function deserializeTask(row) {
+    if (!row) return null;
+    
+    const tags = safeParseJSON(row.tags_json, []);
+    const reviewMeta = safeParseJSON(row.review_meta_json, {});
+    
+    const legacyKnowledgeRefs = safeParseJSON(row.knowledge_refs_json, []);
+    let knowledgeTags = reviewMeta.knowledge_tags || [];
+    if (knowledgeTags.length === 0 && legacyKnowledgeRefs.length > 0) {
+         knowledgeTags = legacyKnowledgeRefs;
+    }
+
+    return normalizeTask({
+        id: row.id,
+        title: row.title,
+        period: row.period,
+        kanban_col: row.kanban_col,
+        priority: row.priority,
+        is_focused: Boolean(row.is_focused),
+        memo: row.memo,
+        is_review: Boolean(row.is_review),
+        
+        project: row.project,
+        plan_date: row.plan_date,
+        due_date: row.due_date,
+        planned_pomodoros: row.planned_pomodoros,
+        actual_pomodoros: row.actual_pomodoros,
+        planned_amount: row.planned_amount,
+        completed_amount: row.completed_amount,
+        unit: row.unit,
+        tags: tags,
+        creator_agent: row.creator_agent,
+        
+        knowledge_tags: knowledgeTags,
+        external_urls: reviewMeta.external_urls || [],
+        review_info: reviewMeta.review_info || null,
+        
+        created_at: row.created_at,
+        updated_at: row.updated_at
+    });
+}
+
 const statements = {
-    getAllTasks: db.prepare('SELECT * FROM tasks ORDER BY COALESCE(plan_date, created_at) ASC, created_at ASC'),
+    getAllTasks: db.prepare('SELECT * FROM tasks ORDER BY updated_at DESC, created_at DESC'),   
     getTaskById: db.prepare('SELECT * FROM tasks WHERE id = ?'),
+    
     insertTask: db.prepare(`
     INSERT INTO tasks (
-      id, title, status, plan_date, project, priority, progress, next_review_date,
-      properties_json, ai_meta_json, knowledge_refs_json, memo, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, title, period, kanban_col, priority, is_focused, memo, is_review,
+      project, plan_date, due_date, planned_pomodoros, actual_pomodoros,
+      planned_amount, completed_amount, unit, tags_json, creator_agent, review_meta_json,
+      knowledge_refs_json, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `),
+  
     updateTask: db.prepare(`
     UPDATE tasks SET
-      title = ?, status = ?, plan_date = ?, project = ?, priority = ?, progress = ?, next_review_date = ?,
-      properties_json = ?, ai_meta_json = ?, knowledge_refs_json = ?, memo = ?, updated_at = ?
+      title = ?, period = ?, kanban_col = ?, priority = ?, is_focused = ?, memo = ?, is_review = ?,
+      project = ?, plan_date = ?, due_date = ?, planned_pomodoros = ?, actual_pomodoros = ?,
+      planned_amount = ?, completed_amount = ?, unit = ?, tags_json = ?, creator_agent = ?, review_meta_json = ?,
+      updated_at = ?
     WHERE id = ?
   `),
+  
     deleteTask: db.prepare('DELETE FROM tasks WHERE id = ?')
 };
 
 async function getAllTasks() {
-    const rows = statements.getAllTasks.all();
-    return rows.map(deserializeTask);
+    return statements.getAllTasks.all().map(deserializeTask);
 }
 
 async function getTaskById(id) {
@@ -163,51 +214,63 @@ async function insertTask(task) {
     statements.insertTask.run(
         serialized.id,
         serialized.title,
-        serialized.status,
-        serialized.plan_date,
-        serialized.project,
+        serialized.period,
+        serialized.kanban_col,
         serialized.priority,
-        serialized.progress,
-        serialized.next_review_date,
-        serialized.properties_json,
-        serialized.ai_meta_json,
-        serialized.knowledge_refs_json,
+        serialized.is_focused,
         serialized.memo,
+        serialized.is_review,
+        serialized.project,
+        serialized.plan_date,
+        serialized.due_date,
+        serialized.planned_pomodoros,
+        serialized.actual_pomodoros,
+        serialized.planned_amount,
+        serialized.completed_amount,
+        serialized.unit,
+        serialized.tags_json,
+        serialized.creator_agent,
+        serialized.review_meta_json,
+        '[]', 
         serialized.created_at,
         serialized.updated_at
     );
-
-    return getTaskById(task.id);
+    return getTaskById(serialized.id);
 }
 
 async function updateTask(id, updates) {
     const existingTask = await getTaskById(id);
     if (!existingTask) {
-        throw new Error(`Task not found with id: ${id}`);
+        throw new Error('Task not found with id: ' + id);
     }
 
-    const mergedTask = {
+    const mergedTask = normalizeTask({
         ...existingTask,
         ...updates,
-        properties: deepMerge(existingTask.properties || {}, updates.properties || {}),
-        ai_meta: deepMerge(existingTask.ai_meta || {}, updates.ai_meta || {}),
-        knowledge_refs: deepMerge(existingTask.knowledge_refs || {}, updates.knowledge_refs || {}),
+        id,
         updated_at: new Date().toISOString()
-    };
+    });
 
     const serialized = serializeTask(mergedTask);
     statements.updateTask.run(
         serialized.title,
-        serialized.status,
-        serialized.plan_date,
-        serialized.project,
+        serialized.period,
+        serialized.kanban_col,
         serialized.priority,
-        serialized.progress,
-        serialized.next_review_date,
-        serialized.properties_json,
-        serialized.ai_meta_json,
-        serialized.knowledge_refs_json,
+        serialized.is_focused,
         serialized.memo,
+        serialized.is_review,
+        serialized.project,
+        serialized.plan_date,
+        serialized.due_date,
+        serialized.planned_pomodoros,
+        serialized.actual_pomodoros,
+        serialized.planned_amount,
+        serialized.completed_amount,
+        serialized.unit,
+        serialized.tags_json,
+        serialized.creator_agent,
+        serialized.review_meta_json,
         serialized.updated_at,
         id
     );
@@ -215,10 +278,47 @@ async function updateTask(id, updates) {
     return getTaskById(id);
 }
 
+async function replaceAllTasks(tasks) {
+    const normalizedTasks = Array.isArray(tasks) ? tasks.map(normalizeTask) : [];
+    const transaction = db.transaction(items => {
+        db.exec('DELETE FROM tasks');
+        for (const task of items) {
+            const serialized = serializeTask(task);
+            statements.insertTask.run(
+                serialized.id,
+                serialized.title,
+                serialized.period,
+                serialized.kanban_col,
+                serialized.priority,
+                serialized.is_focused,
+                serialized.memo,
+                serialized.is_review,
+                serialized.project,
+                serialized.plan_date,
+                serialized.due_date,
+                serialized.planned_pomodoros,
+                serialized.actual_pomodoros,
+                serialized.planned_amount,
+                serialized.completed_amount,
+                serialized.unit,
+                serialized.tags_json,
+                serialized.creator_agent,
+                serialized.review_meta_json,
+                '[]', 
+                serialized.created_at,
+                serialized.updated_at
+            );
+        }
+    });
+
+    transaction(normalizedTasks);
+    return getAllTasks();
+}
+
 async function deleteTask(id) {
     const existingTask = await getTaskById(id);
     if (!existingTask) {
-        throw new Error(`Task not found with id: ${id}`);
+        throw new Error('Task not found with id: ' + id);
     }
 
     statements.deleteTask.run(id);
@@ -227,39 +327,37 @@ async function deleteTask(id) {
 
 async function getTaskStats() {
     const tasks = await getAllTasks();
-    const today = new Date().toISOString().slice(0, 10);
-
     return tasks.reduce(
         (stats, task) => {
-            const status = task.properties?.status;
-            const isReviewable = Boolean(task.ai_meta?.review_info?.is_reviewable);
-            const nextReviewDate = task.ai_meta?.review_info?.next_review_date;
-
             stats.total += 1;
-            if (status === 'todo') stats.todo += 1;
-            if (status === 'in_progress') stats.in_progress += 1;
-            if (status === 'done') stats.done += 1;
-            if (isReviewable && nextReviewDate && nextReviewDate <= today && status !== 'done') {
-                stats.review_due += 1;
-            }
-            if (!isReviewable && task.properties?.plan_date && task.properties.plan_date < today && status !== 'done') {
-                stats.overdue += 1;
-            }
-            if (status === 'done') {
-                stats.pomodoro_done += Number(task.ai_meta?.pomodoro_spent || 0);
-            }
+            if (task.kanban_col === 'todo') stats.todo += 1;
+            if (task.kanban_col === 'in_progress') stats.in_progress += 1;
+            if (task.kanban_col === 'done') stats.done += 1;
+            if (task.is_review) stats.review += 1;
+            if (task.is_focused) stats.focused += 1;
             return stats;
         },
-        {
-            total: 0,
-            todo: 0,
-            in_progress: 0,
-            done: 0,
-            review_due: 0,
-            overdue: 0,
-            pomodoro_done: 0
-        }
+        { total: 0, todo: 0, in_progress: 0, done: 0, review: 0, focused: 0 }
     );
+}
+
+// === V4.0 新增：活期父级项目过滤引擎 ===
+async function getParentCandidates(currentPeriod) {
+    let targetPeriod = null;
+    // 任务向上一级跃迁，寻找父节点
+    if (currentPeriod === 'daily') targetPeriod = 'short_term';
+    else if (currentPeriod === 'short_term') targetPeriod = 'long_term';
+    
+    // 如果是 long_term 或者是不可预知的常驻任务，返回空数组
+    if (!targetPeriod) return [];
+    
+    const now = Date.now();
+    // 活期过滤网：不能是 done 完结的，且截止日期必须在当下或未来
+    const sql = "SELECT id, title, period, due_date FROM tasks WHERE period = ? AND kanban_col != 'done' AND (due_date IS NULL OR due_date >= ?) ORDER BY created_at DESC";
+    const stmt = db.prepare(sql);
+    
+    // 由于我们存储的是时间戳，直接传 now 进去做数值比对
+    return stmt.all(targetPeriod, now);
 }
 
 module.exports = {
@@ -270,6 +368,8 @@ module.exports = {
     getTaskById,
     insertTask,
     updateTask,
+    replaceAllTasks,
     deleteTask,
-    getTaskStats
+    getTaskStats,
+    getParentCandidates // 导出这个方法，供 taskApi.cjs 的 /parent-candidates 路由调用
 };

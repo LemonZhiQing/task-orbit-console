@@ -2,10 +2,10 @@
   <div class="mini-radar-widget glass-effect" @click="$emit('expand')" title="点击展开全域排期雷达">
     <div class="widget-header">
       <span class="widget-title">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="M8 14h.01"></path><path d="M12 14h.01"></path><path d="M16 14h.01"></path><path d="M8 18h.01"></path><path d="M12 18h.01"></path><path d="M16 18h.01"></path></svg>
-        全域排期雷达
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="M8 14h.01"></path><path d="M12 14h.01"></path><path d="M16 14h.01"></path><path d="M8 18h.01"></path><path d="M12 18h.01"></path><path d="M16 18h.01"></path></svg>
       </span>
-      <span class="widget-action">展开 ↗</span>
+      <!-- 鼠标悬浮时显示的箭头放到了右侧一点，因为宽度窄了不能太拥挤 -->
+      <span class="widget-action">↗</span>
     </div>
     
     <div class="widget-body">
@@ -14,7 +14,9 @@
           <div class="stat-num" style="color: #4A9D9A;">{{ activeShortTermCount }}</div>
           <div class="stat-label">活跃短期目标</div>
         </div>
+        
         <div class="stat-divider"></div>
+        
         <div class="stat-block">
           <div class="stat-num" style="color: #CD853F;">{{ activeLongTermCount }}</div>
           <div class="stat-label">并行长期宏图</div>
@@ -52,8 +54,11 @@ const activeLongTermCount = computed(() => store.longTermTasks.filter(isTaskActi
   top: 130px !important;  /* 避开头部的导航栏 */
   right: 48px !important;
   z-index: 900 !important; /* 确保它在除 Drawer 以外的最上层 */
-  width: 250px;
-  height: 100px;
+  
+  /* 🔪 主人的降维打击：宽度砍半，高度随内容自适应 */
+  width: 130px;
+  height: auto;
+  min-height: 160px;
 
   /* 毛玻璃悬浮质感 */
   background: rgba(255, 255, 255, 0.75) !important;
@@ -65,7 +70,7 @@ const activeLongTermCount = computed(() => store.longTermTasks.filter(isTaskActi
 
 .mini-radar-widget {
   border-radius: 16px;
-  padding: 16px 20px;
+  padding: 16px 14px; /* 左右内边距缩小一点，适应窄宽度 */
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   display: flex;
@@ -79,14 +84,79 @@ const activeLongTermCount = computed(() => store.longTermTasks.filter(isTaskActi
   background: rgba(255, 255, 255, 0.95) !important;
 }
 
-.widget-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.widget-title { font-size: 14px; font-weight: 600; color: var(--vcp-text-main); display: flex; align-items: center; }
-.widget-action { font-size: 11px; font-weight: 600; background: rgba(74, 157, 154, 0.08); color: var(--color-primary, #4A9D9A); padding: 2px 8px; border-radius: 10px; opacity: 0; transition: all 0.3s; transform: translateX(-5px); }
-.mini-radar-widget:hover .widget-action { opacity: 1; transform: translateX(0); }
-.widget-body { flex: 1; display: flex; align-items: center; }
-.active-stats-grid { width: 100%; display: flex; align-items: center; justify-content: space-between; }
-.stat-block { display: flex; flex-direction: column; align-items: flex-start; flex: 1; }
-.stat-divider { width: 1px; height: 28px; background: rgba(62, 58, 54, 0.1); margin: 0 16px; }
-.stat-num { font-size: 26px; font-weight: 800; line-height: 1; margin-bottom: 4px; text-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-.stat-label { font-size: 11px; font-weight: 600; color: var(--vcp-text-sub); }
+.widget-header { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  margin-bottom: 16px; 
+}
+.widget-title { 
+  font-size: 13px; /* 稍微调小字号适应窄体 */
+  font-weight: 600; 
+  color: var(--vcp-text-main); 
+  display: flex; 
+  align-items: center; 
+}
+.widget-action { 
+  font-size: 12px; 
+  font-weight: bold; 
+  color: var(--color-primary, #4A9D9A); 
+  opacity: 0; 
+  transition: all 0.3s; 
+  transform: translateX(-5px); 
+}
+.mini-radar-widget:hover .widget-action { 
+  opacity: 1; 
+  transform: translateX(0); 
+}
+
+.widget-body { 
+  flex: 1; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center;
+}
+
+/* 🎯 核心改变：横向排版(row) 变 纵向排版(column) */
+.active-stats-grid { 
+  width: 100%; 
+  display: flex; 
+  flex-direction: column; /* 竖向排列 */
+  align-items: center; 
+  justify-content: center;
+  gap: 12px; /* 两个指标块之间的上下间距 */
+}
+
+/* 数字模块居中展示 */
+.stat-block { 
+  display: flex; 
+  flex-direction: column; 
+  align-items: center; /* 居中对齐 */
+  justify-content: center;
+  width: 100%; 
+}
+
+/* 原本的竖线变成一条优雅的水平虚线 */
+.stat-divider { 
+  width: 60%; /* 虚线不需要占满整个宽度，留白更好看 */
+  height: 1px; 
+  background: transparent;
+  border-bottom: 1px dashed rgba(62, 58, 54, 0.2); 
+  margin: 4px 0; 
+}
+
+.stat-num { 
+  font-size: 32px; /* 数字可以稍微再放大一点点，作为视觉核心 */
+  font-weight: 800; 
+  line-height: 1; 
+  margin-bottom: 6px; 
+  text-shadow: 0 2px 4px rgba(0,0,0,0.05); 
+}
+
+.stat-label { 
+  font-size: 11px; 
+  font-weight: 600; 
+  color: var(--vcp-text-sub); 
+  text-align: center;
+}
 </style>

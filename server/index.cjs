@@ -39,10 +39,18 @@ const port = Number(process.env.TASK_SERVER_PORT || 6105);
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+const allowedOrigins = String(process.env.TASK_ALLOWED_ORIGINS || 'http://127.0.0.1:5173,http://localhost:5173')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean);
+
 app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+    const origin = req.headers.origin;
+    if (!origin || allowedOrigins.includes(origin)) {
+        res.header('Access-Control-Allow-Origin', origin || 'http://127.0.0.1:5173');
+        res.header('Access-Control-Allow-Credentials', 'true');
+    }
     res.header('Vary', 'Origin');
-    res.header('Access-Control-Allow-Credentials', 'true');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
     res.header('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
     if (req.method === 'OPTIONS') {

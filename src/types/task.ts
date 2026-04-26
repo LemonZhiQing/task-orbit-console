@@ -8,6 +8,27 @@ export interface InboxItem {
   created_at: number;
 }
 
+export interface ReviewHistoryItem {
+  reviewed_at: number;
+  remembered: boolean;
+  stage_before: number;
+  stage_after: number;
+  next_review_date: string;
+}
+
+export interface ReviewInfo {
+  next_review_date: string;
+  stage: number;
+  completed?: boolean;
+}
+
+export interface ParentCandidate {
+  id: string;
+  title: string;
+  period: TaskPeriod;
+  due_date?: number | null;
+}
+
 export interface ITaskItem {
   // === 1. 身份与状态 ===
   id: string;
@@ -20,31 +41,35 @@ export interface ITaskItem {
   creator_agent?: string;
   created_at: number;
   updated_at: number;
+  version?: number;
 
   // === 3. 调度与效能 ===
-  plan_date?: number;
-  due_date?: number;
+  plan_date?: number | null;
+  due_date?: number | null;
+  completed_at?: number | null;
+  deleted_at?: number | null;
+  sort_order?: number;
   planned_pomodoros?: number;
   actual_pomodoros?: number;
   planned_amount?: number;
   completed_amount?: number;
-  unit?: string;
+  unit?: string | null;
 
   // === 4. 描述与记录 ===
-  project?: string; // 🎯 补回的所属项目
+  project?: string | null;
+  parent_id?: string | null;
   memo?: string;
   tags?: string[];
+  color?: string | null;
 
   // === 5. 艾宾浩斯复习闭环 ===
   is_review: boolean;
   knowledge_tags?: string[];
   external_urls?: string[];
-  review_info?: {
-    next_review_date: string;
-    stage: number;
-  };
+  review_info?: ReviewInfo | null;
+  review_history?: ReviewHistoryItem[];
 
   // === 6. 系统交互态 ===
   is_focused: boolean;
-  ai_meta_json?: string;
+  ai_meta_json?: string | null;
 }

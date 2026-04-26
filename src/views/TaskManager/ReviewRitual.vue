@@ -54,7 +54,7 @@ onMounted(() => {
   store.hydrateFromServer().catch(() => {})
 })
 
-const reviewList = computed(() => store.reviewTasks || [])
+const reviewList = computed(() => store.todayReviewTasks || [])
 
 const currentTask = computed(() => reviewList.value[currentIndex.value] || null)
 
@@ -68,7 +68,7 @@ const currentMemo = computed(() => {
 
 const progressPercent = computed(() => {
   if (reviewList.value.length === 0) return 0
-  return ((currentIndex.value) / reviewList.value.length) * 100
+  return ((currentIndex.value + 1) / reviewList.value.length) * 100
 })
 
 const handleMark = async (remembered: boolean) => {

@@ -1,40 +1,51 @@
 import api from './index'
 
 export const taskApi = {
-    getTasks() {
-        return api.get('/tasks')
+    getTasks(params = {}) {
+        return api.get('/tasks', { params })
     },
 
-    getTaskById(id) {
-        return api.get(`/tasks/${id}`)
+    getTaskById(id, params = {}) {
+        return api.get(`/tasks/${id}`, { params })
     },
 
     createTask(data) {
         return api.post('/tasks', data)
     },
 
+    upsertTask(data) {
+        return api.post('/tasks/upsert', data)
+    },
+
     updateTask(id, data) {
         return api.patch(`/tasks/${id}`, data)
+    },
+
+    restoreTask(id) {
+        return api.patch(`/tasks/${id}/restore`)
     },
 
     batchUpdateTasks(tasks) {
         return api.post('/tasks/batch', { tasks })
     },
 
-    deleteTask(id) {
-        return api.delete(`/tasks/${id}`)
+    deleteTask(id, hard = false) {
+        return api.delete(`/tasks/${id}`, { params: { hard } })
     },
 
     getStats() {
         return api.get('/tasks/stats')
     },
 
+    createBackup(reason = 'frontend') {
+        return api.post('/tasks/backup', { reason })
+    },
+
     openLocal(filePath) {
         return api.post('/tasks/open-local', { filePath })
     },
-    
-    // V4.0 新增：获取活期父级项目候选人
+
     getParentCandidates(period) {
-        return api.get(`/tasks/parent-candidates?period=${period}`)
+        return api.get('/tasks/parent-candidates', { params: { period } })
     }
 }

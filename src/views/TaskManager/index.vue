@@ -1,44 +1,43 @@
 <template>
   <div class="task-manager-layout">
-    <!-- 极光呼吸背景层 -->
     <div class="aurora-layer">
       <div class="aurora-blob blob-1"></div>
       <div class="aurora-blob blob-2"></div>
       <div class="aurora-blob blob-3"></div>
     </div>
 
-    <!-- 主工作区：顶栏已合并至全局，此处专注渲染主体 -->
     <div class="main-workspace">
-      <Transition name="fade" mode="out-in">
-        <component :is="currentViewComponent" />
-      </Transition>
+      <router-view v-slot="{ Component }">
+        <Transition name="fade" mode="out-in">
+          <component :is="Component" />
+        </Transition>
+      </router-view>
     </div>
 
-    <!-- 全局悬浮球 Inbox：改为 fixed 定位，绝不乱跑 -->
+    <TaskOverviewFloat />
     <InboxFab />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent } from 'vue'
+import { watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useTaskStore } from '@/stores/taskStore'
 import InboxFab from './components/InboxFab.vue'
+import TaskOverviewFloat from './components/TaskOverviewFloat.vue'
 
+const route = useRoute()
 const store = useTaskStore()
 
-const TodayBoard = defineAsyncComponent(() => import('./TodayBoard.vue'))
-const PlanningCenter = defineAsyncComponent(() => import('./PlanningCenter.vue'))
-const ReviewRitual = defineAsyncComponent(() => import('./ReviewRitual.vue'))
-
-// 直接监听 Store 中的全局视图状态
-const currentViewComponent = computed(() => {
-  switch (store.currentView) {
-    case 'today': return TodayBoard
-    case 'planning': return PlanningCenter
-    case 'review': return ReviewRitual
-    default: return TodayBoard
-  }
-})
+watch(
+  () => route.meta.taskView,
+  view => {
+    if (view === 'today' || view === 'planning' || view === 'review') {
+      store.currentView = view
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>
@@ -51,11 +50,9 @@ const currentViewComponent = computed(() => {
   overflow: hidden;
   position: relative;
   transition: background-color 0.4s ease;
-  /* 为全局 Sticky 顶栏留出一点呼吸空间 */
   padding-top: 12px; 
 }
 
-/* 极光呼吸背景层 */
 .aurora-layer {
   position: absolute; inset: 0; pointer-events: none; z-index: 0; overflow: hidden;
 }

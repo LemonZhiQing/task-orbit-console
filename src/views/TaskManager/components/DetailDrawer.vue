@@ -50,6 +50,18 @@
             </select>
           </div>
 
+          <!-- 专属主题色 (Color Picker) -->
+          <div class="attr-row">
+            <span class="attr-icon">🎨</span><span class="attr-label">颜色</span>
+            <el-color-picker 
+              v-model="task.color" 
+              size="small" 
+              @change="saveTask" 
+              :predefine="['#4A9D9A', '#3E3A36', '#516B91', '#81C784', '#F43F5E', '#F59E0B', '#8B5CF6', '#10B981', '#3B82F6']"
+              style="margin-left: 4px;"
+            />
+          </div>
+
           <!-- 所属项目 (解除封印，如果没选则提示没有长任务) -->
           <div class="attr-row">
             <span class="attr-icon">🎯</span><span class="attr-label">项目</span>
@@ -186,6 +198,7 @@
 import { ref, watch } from 'vue'
 import { useTaskStore } from '@/stores/taskStore'
 import { taskApi } from '@/api/task'
+import type { ITaskItem, ParentCandidate, TaskPeriod } from '@/types/task'
 
 const props = defineProps<{
   visible: boolean
@@ -195,27 +208,20 @@ const props = defineProps<{
 const emit = defineEmits(['close'])
 const store = useTaskStore()
 
-const task = ref<any>(null)
+const task = ref<ITaskItem | null>(null)
 const localPlanDate = ref<number | null>(null)
 const localDueDate = ref<number | null>(null)
 const formStrings = ref({ knowledge_tags: '', external_urls: '', tags: '' })
-const parentCandidates = ref<any[]>([])
+const parentCandidates = ref<ParentCandidate[]>([])
 
-const fetchParentCandidates = async (period: string) => {
+const fetchParentCandidates = async (period: TaskPeriod) => {
   if (!period) {
     parentCandidates.value = [];
     return;
   }
   try {
-    const res = await taskApi.getParentCandidates(period);
-    // 💡 核心修复：兼容 Axios 拦截器是否解包了 res.data 的两种情况
-    if (res.data && res.data.success) {
-      parentCandidates.value = res.data.data || []; // 未解包 (Axios 原生 Response)
-    } else if (res && res.success) {
-      parentCandidates.value = res.data || []; // 已解包 (业务层直接拿到 Body)
-    } else {
-      parentCandidates.value = [];
-    }
+    const res = await taskApi.getParentCandidates(period) as any;
+    parentCandidates.value = Array.isArray(res?.data) ? res.data : [];
   } catch (error) {
     console.error('Failed to fetch parent candidates:', error);
     parentCandidates.value = [];
@@ -243,7 +249,9 @@ watch(() => props.visible, (newVal) => {
 // 专属拦截器：当用户在下拉框里切换“周期”时，先清理旧项目，再拉取新项目，最后保存
 const handlePeriodChange = () => {
     // 跨级了，老父亲不合法了，清空！
+    if (!task.value) return
     task.value.project = null;
+    task.value.parent_id = null;
     
     // 去拉取新层级的候选人
     fetchParentCandidates(task.value.period);
@@ -253,11 +261,11 @@ const handlePeriodChange = () => {
 }
 
 const periodName = (p: string) => {
-  const map: any = { daily: '今日', short_term: '短期', long_term: '长期', routine: '常驻' }
+  const map: Record<string, string> = { daily: '今日', short_term: '短期', long_term: '长期', routine: '常驻' }
   return map[p] || p
 }
 
-const formatDateTime = (ts: number) => {
+const formatDateTime = (ts: number | string) => {
   if (!ts) return '';
   const d = new Date(ts);
   return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
@@ -265,8 +273,10 @@ const formatDateTime = (ts: number) => {
 
 const saveTask = () => {
   if (!task.value) return
-  task.value.plan_date = localPlanDate.value ? Number(localPlanDate.value) : undefined
-  task.value.due_date = localDueDate.value ? Number(localDueDate.value) : undefined
+  task.value.plan_date = localPlanDate.value ? Number(localPlanDate.value) : null
+  task.value.due_date = localDueDate.value ? Number(localDueDate.value) : null
+  task.value.parent_id = task.value.project || task.value.parent_id || null
+  task.value.project = task.value.parent_id
   task.value.knowledge_tags = formStrings.value.knowledge_tags.split(',').map(s => s.trim()).filter(Boolean)
   task.value.external_urls = formStrings.value.external_urls.split(',').map(s => s.trim()).filter(Boolean)
   task.value.tags = formStrings.value.tags.split(',').map(s => s.trim()).filter(Boolean)

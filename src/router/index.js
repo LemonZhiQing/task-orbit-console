@@ -11,9 +11,9 @@ const routes = [
         component: () => import('@/views/TaskManager/index.vue'),
         children: [
           { path: '', redirect: '/task-manager/today' },
-          { path: 'today', name: 'TodayBoard', component: () => import('@/views/TaskManager/TodayBoard.vue'), meta: { title: '今日无垠' } },
-          { path: 'planning', name: 'PlanningCenter', component: () => import('@/views/TaskManager/PlanningCenter.vue'), meta: { title: '排期中心' } },
-          { path: 'review', name: 'ReviewRitual', component: () => import('@/views/TaskManager/ReviewRitual.vue'), meta: { title: '复习仪式' } }
+          { path: 'today', name: 'TodayBoard', component: () => import('@/views/TaskManager/TodayBoard.vue'), meta: { title: '今日无垠', taskView: 'today' } },
+          { path: 'planning', name: 'PlanningCenter', component: () => import('@/views/TaskManager/PlanningCenter.vue'), meta: { title: '目标排期', taskView: 'planning' } },
+          { path: 'review', name: 'ReviewRitual', component: () => import('@/views/TaskManager/ReviewRitual.vue'), meta: { title: '复习仪式', taskView: 'review' } }
         ]
       }
     ]

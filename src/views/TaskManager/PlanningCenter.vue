@@ -32,17 +32,15 @@
         <div class="stats-group">
           <div class="stat-item">
             <span class="stat-label">累计专注</span>
-            <div class="stat-value">42 <span class="stat-unit">小时</span></div>
+            <div class="stat-value">{{ store.insights.focusHours }} <span class="stat-unit">小时</span></div>
           </div>
           <div class="stat-item">
             <span class="stat-label">连续达成</span>
-            <div class="stat-value">12 <span class="stat-unit">天 🔥</span></div>
+            <div class="stat-value">{{ store.insights.streak }} <span class="stat-unit">天 🔥</span></div>
           </div>
         </div>
 
-        <!-- 番茄钟热力趋势占据剩下的全部宽度 -->
         <div class="chart-group">
-          <div class="chart-label">番茄钟热力趋势</div>
           <div class="chart-wrapper">
             <div class="sparkline-container">
               <svg viewBox="0 0 400 60" preserveAspectRatio="none" class="sparkline-svg">       
@@ -63,17 +61,20 @@
             </div>
             <div class="heatmap-container" :style="{ gap: heatmapGap }">
               <div
-                v-for="(val, idx) in activityData"
-                :key="idx"
+                v-for="point in activityData"
+                :key="point.key"
                 class="heat-cube"
-                :style="{ 
-                  opacity: val === 0 ? 0.05 : val, 
-                  boxShadow: val > 0.8 ? '0 2px 6px rgba(74, 157, 154, 0.4)' : 'none',
-                  background: val === 0 ? 'var(--vcp-text-sub)' : 'var(--color-primary, #4A9D9A)',
-                  borderRadius: activityData.length > 90 ? '1px' : '4px'
+                :style="{
+                  opacity: point.value === 0 ? 0.05 : point.value,
+                  boxShadow: point.value > 0.8 ? '0 2px 6px rgba(74, 157, 154, 0.4)' : 'none',
+                  background: point.value === 0 ? 'var(--vcp-text-sub)' : 'var(--color-primary, #4A9D9A)',
+                  borderRadius: activityData.length > 72 ? '2px' : '4px'
                 }"
-                :title="`活跃度: ${Math.round(val * 100)}%`"
+                :title="`${point.label} · 活跃度: ${Math.round(point.value * 100)}%`"
               ></div>
+            </div>
+            <div class="heatmap-axis" v-if="axisLabels.length > 0">
+              <span v-for="label in axisLabels" :key="label.key" :style="{ left: label.left + '%' }">{{ label.text }}</span>
             </div>
           </div>
         </div>
@@ -155,19 +156,73 @@
     <!-- 沉浸式详情抽屉 -->
     <DetailDrawer :visible="isDrawerOpen" :task-id="selectedTaskId" @close="isDrawerOpen = false" />
     
-    <!-- 全域时间线对话框 -->
-    <el-dialog 
-      v-model="isTimelineDialogOpen" 
-      title="全域排期雷达 (Timeline)" 
-      width="80%" 
-      class="vcp-custom-dialog"
+    <!-- 全域时间线对话框 (Gantt) -->
+    <el-dialog
+      v-model="isTimelineDialogOpen"
+      title="全域排期雷达 (Timeline)"
+      width="92%"
+      class="vcp-custom-dialog gantt-custom-dialog"
       align-center
       destroy-on-close
+      append-to-body
+      :lock-scroll="false"
     >
-      <div style="height: 50vh; display: flex; align-items: center; justify-content: center; background: #fafaf8; border-radius: 12px; border: 1px dashed #e0e0e0; color: #888; font-weight: 600;">
-         🚧 全屏时间线沙盘组件开发中...
+      <div class="gantt-dialog-body">
+        <!-- 顶部多维控制台 (优雅分离) -->
+        <div class="gantt-toolbar">
+          
+          <!-- 左侧：缩放控制 -->
+          <div class="toolbar-group left-group">
+            <span class="toolbar-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              缩放：
+            </span>
+            <el-radio-group v-model="currentZoom" size="small" class="vcp-radio-group">
+              <el-radio-button value="day">天 (Day)</el-radio-button>
+              <el-radio-button value="week">周 (Week)</el-radio-button>
+              <el-radio-button value="month">月 (Month)</el-radio-button>
+              <el-radio-button value="quarter">季度 (Quarter)</el-radio-button>
+              <el-radio-button value="year">年 (Year)</el-radio-button>
+            </el-radio-group>
+          </div>
+
+          <!-- 右侧：过滤器组合 -->
+          <div class="right-filters">
+            <div class="toolbar-group">
+               <span class="toolbar-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                层级：
+              </span>
+              <el-select v-model="filterPeriod" size="small" style="width: 140px;" class="vcp-custom-select">
+                <el-option label="所有层级" value="all" />
+                <el-option label="长期宏图 (Epic)" value="long_term" />
+                <el-option label="短期目标 (Story)" value="short_term" />
+                <el-option label="今日冲刺 (Task)" value="daily" />
+              </el-select>
+            </div>
+
+            <div class="toolbar-group">
+               <span class="toolbar-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                状态：
+              </span>
+              <el-select v-model="filterStatus" size="small" style="width: 140px;" class="vcp-custom-select">
+                <el-option label="全部状态" value="all" />
+                <el-option label="进行中 (活期)" value="active" />
+                <el-option label="已完结/过期" value="done_or_expired" />
+              </el-select>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- DHTMLX Gantt 组件挂载点 (v-if 魔法：延迟加载，确保 DOM 已挂载) -->
+        <div class="gantt-wrapper">
+          <GanttChart v-if="isTimelineDialogOpen" :tasks="ganttTasks" :zoomLevel="currentZoom" @task-selected="openDetail" />
+        </div>
       </div>
     </el-dialog>
+
   </div>
 </template>
 
@@ -176,6 +231,7 @@ import { computed, ref, onMounted } from 'vue'
 import TaskCard from './components/TaskCard.vue'
 import DetailDrawer from './components/DetailDrawer.vue'
 import MiniTimelineWidget from './components/MiniTimelineWidget.vue'
+import GanttChart from '@/components/GanttChart.vue' // ✅ 引入晴天刚刚打造的包装组件
 import { useTaskStore } from '@/stores/taskStore'
 
 const store = useTaskStore()
@@ -198,6 +254,105 @@ const openDetail = (taskId: string) => {
 }
 
 const isTimelineDialogOpen = ref(false)
+const currentZoom = ref('month') // 默认视图级别：月
+
+// V4.0 新增过滤维度
+const filterPeriod = ref('all') 
+const filterStatus = ref('all')
+
+// 🌟 核心：将 Store 中的任务转换为 DHTMLX 认识的 JSON 格式 (带多维过滤)
+const ganttTasks = computed(() => {
+  let allTasks = [
+    ...store.longTermTasks, 
+    ...store.shortTermTasks, 
+    ...store.normalizedTaskList.filter(t => t.period === 'daily')
+  ]
+
+  // 1. 层级维度过滤
+  if (filterPeriod.value !== 'all') {
+     allTasks = allTasks.filter(t => t.period === filterPeriod.value)
+  }
+
+  // 2. 状态维度过滤 (利用当前时间对比截止日，以及 kanban_col)
+  const now = Date.now()
+  if (filterStatus.value === 'active') {
+     allTasks = allTasks.filter(t => t.kanban_col !== 'done' && (!t.due_date || t.due_date >= now))
+  } else if (filterStatus.value === 'done_or_expired') {
+     allTasks = allTasks.filter(t => t.kanban_col === 'done' || (t.due_date && t.due_date < now))
+  }
+  
+  // 建立一个全局可用的 ID 集合，用来做“孤儿检测”
+  const validIds = new Set(allTasks.map(t => t.id))
+  
+  const data = allTasks.map(t => {
+    // 1. 起始时间计算
+    const startDate = t.plan_date ? new Date(t.plan_date) : new Date(t.created_at || Date.now());
+    
+    // 2. 截止时间计算
+    let endDate;
+    if (t.due_date) {
+       endDate = new Date(t.due_date);
+    } else {
+       endDate = new Date(startDate);
+       if (t.period === 'long_term') endDate.setMonth(endDate.getMonth() + 1);
+       else if (t.period === 'short_term') endDate.setDate(endDate.getDate() + 7);
+       else endDate.setHours(endDate.getHours() + 2); // 💡 今日任务默认只占 2 个小时！避免横跨整天
+    }
+    if (endDate.getTime() <= startDate.getTime()) {
+       // 防重合：日常任务加2小时，跨度任务加24小时
+       const padding = t.period === 'daily' ? 2 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+       endDate = new Date(startDate.getTime() + padding); 
+    }
+
+    // 3. 进度计算
+    let progress = 0;
+    if (t.kanban_col === 'done') progress = 1;
+    else if (t.kanban_col === 'in_progress') progress = 0.5;
+    else if (t.planned_amount && t.planned_amount > 0) {
+       progress = Math.min(1, (t.completed_amount || 0) / t.planned_amount);
+    }
+
+    // 4. 树形孤儿修复 (如果指定的 parentId 在本批数据中找不到，强制降级为顶层)
+    let parentId: string | number = t.parent_id || t.project || 0;
+    if (typeof parentId === 'string' && !validIds.has(parentId)) {
+       parentId = 0;
+    }
+    
+    // 5. 颜色指派：实现“底槽空轨+实体进度”的视觉分离
+    let renderType = t.period === 'long_term' ? 'project' : 'task';
+    let themeColor = t.color; // 提取用户的灵感专属色
+    
+    if (!themeColor) {
+        // 如果用户没选颜色，采用阶梯降级色卡
+        if (t.period === 'long_term') {
+           themeColor = '#3E3A36'; 
+        } else if (t.period === 'short_term') {
+           themeColor = '#516B91'; 
+        } else {
+           themeColor = '#4A9D9A'; 
+        }
+    }
+
+    return {
+      id: t.id,
+      text: t.title || '未命名任务',
+      start_date: startDate,
+      end_date: endDate,
+      parent: parentId, 
+      progress: progress,
+      type: renderType,
+      // 🚨 核心视觉改动：color 决定了整个 Bar 的底层背景，我们用极浅的灰色作为“空轨”
+      color: 'rgba(62, 58, 54, 0.08)',
+      // progressColor 决定了里面填色的进度，我们注入真实的绚丽色彩
+      progressColor: themeColor,
+      // 额外把真实的颜色打包传给外层，供百分比文本渲染使用
+      themeColor: themeColor,
+      open: true 
+    }
+  });
+
+  return { data, links: [] };
+})
 
 const quickAdd = (periodType: string) => {
   const now = new Date()
@@ -210,7 +365,7 @@ const quickAdd = (periodType: string) => {
 
   const newTask = store.createTask({
     title: '',
-    period: periodType as any,
+    period: periodType as 'short_term' | 'long_term' | 'routine',
     kanban_col: 'todo', 
     plan_date: timestamp,
     due_date: timestamp 
@@ -218,16 +373,20 @@ const quickAdd = (periodType: string) => {
   openDetail(newTask.id)
 }
 
+type TimeBucketUnit = 'hour' | 'day' | 'week' | 'month'
+type ActivityPoint = { key: string; label: string; value: number; start: number; end: number }
+type AxisLabel = { key: string; text: string; left: number }
+
 const currentTimeRange = ref('last_30_days')
-const timeRanges: Record<string, { label: string, points: number }> = {
-  today: { label: '当天 (按小时)', points: 24 },
-  this_week: { label: '本周', points: 7 },
-  this_month: { label: '本月', points: 30 },
-  last_30_days: { label: '最近 30 天', points: 30 },
-  last_3_months: { label: '最近 3 个月', points: 90 },
-  last_6_months: { label: '最近半年', points: 180 },
-  last_1_year: { label: '最近一年', points: 365 },
-  all: { label: '所有时间', points: 500 }
+const timeRanges: Record<string, { label: string, points: number, unit: TimeBucketUnit }> = {
+  today: { label: '当天 (按小时)', points: 24, unit: 'hour' },
+  this_week: { label: '本周', points: 7, unit: 'day' },
+  this_month: { label: '本月', points: 30, unit: 'day' },
+  last_30_days: { label: '最近 30 天', points: 30, unit: 'day' },
+  last_3_months: { label: '最近 3 个月', points: 13, unit: 'week' },
+  last_6_months: { label: '最近半年', points: 26, unit: 'week' },
+  last_1_year: { label: '最近一年', points: 52, unit: 'week' },
+  all: { label: '所有时间', points: 24, unit: 'month' }
 }
 
 const rangeLabel = computed(() => timeRanges[currentTimeRange.value].label)
@@ -239,21 +398,66 @@ const heatmapGap = computed(() => {
   return '6px';
 })
 
-const activityData = ref<number[]>([])
+const activityData = ref<ActivityPoint[]>([])
+const axisLabels = ref<AxisLabel[]>([])
 const linePath = ref('')
 const areaPath = ref('')
 const lastPointY = ref(0)
 
-const handleRangeChange = (cmd: string) => {
-  currentTimeRange.value = cmd
-  generateChartData(timeRanges[cmd].points)
+const bucketMsMap: Record<TimeBucketUnit, number> = {
+  hour: 60 * 60 * 1000,
+  day: 24 * 60 * 60 * 1000,
+  week: 7 * 24 * 60 * 60 * 1000,
+  month: 30 * 24 * 60 * 60 * 1000
 }
 
-const generateChartData = (length: number) => {
-  const data = Array.from({ length }, () => {
-    return Math.random() > 0.2 ? Math.random() * 0.8 + 0.2 : 0; 
+const formatBucketLabel = (timestamp: number, unit: TimeBucketUnit) => {
+  const d = new Date(timestamp)
+  if (unit === 'hour') return `${String(d.getHours()).padStart(2, '0')}:00`
+  if (unit === 'week') return `${d.getMonth() + 1}/${d.getDate()} 周`
+  if (unit === 'month') return `${d.getFullYear()}/${d.getMonth() + 1}`
+  return `${d.getMonth() + 1}/${d.getDate()}`
+}
+
+const buildAxisLabels = (points: ActivityPoint[]) => {
+  if (points.length <= 1) return []
+  const indexes = Array.from(new Set([0, Math.floor((points.length - 1) / 2), points.length - 1]))
+  return indexes.map(index => ({
+    key: points[index].key,
+    text: points[index].label.replace(' 周', ''),
+    left: (index / (points.length - 1)) * 100
+  }))
+}
+
+const handleRangeChange = (cmd: string) => {
+  currentTimeRange.value = cmd
+  generateChartData(timeRanges[cmd])
+}
+
+const generateChartData = (range = timeRanges[currentTimeRange.value]) => {
+  const bucketMs = bucketMsMap[range.unit]
+  const length = range.points
+  const end = Date.now()
+  const start = end - (length - 1) * bucketMs
+  const data = Array.from({ length }, (_, idx) => {
+    const bucketStart = start + idx * bucketMs
+    const bucketEnd = bucketStart + bucketMs
+    const pomodoros = store.normalizedTaskList
+      .filter(task => {
+        const ts = task.completed_at || task.updated_at || task.created_at
+        return ts >= bucketStart && ts < bucketEnd
+      })
+      .reduce((sum, task) => sum + (task.actual_pomodoros || (task.kanban_col === 'done' ? 1 : 0)), 0)
+    return {
+      key: `${range.unit}-${bucketStart}`,
+      label: formatBucketLabel(bucketStart, range.unit),
+      value: Math.min(1, pomodoros / (range.unit === 'hour' ? 2 : range.unit === 'day' ? 6 : range.unit === 'week' ? 18 : 48)),
+      start: bucketStart,
+      end: bucketEnd
+    }
   })
   activityData.value = data;
+  axisLabels.value = buildAxisLabels(data);
 
   const width = 400;
   const height = 50; 
@@ -262,9 +466,9 @@ const generateChartData = (length: number) => {
     linePath.value = ''; areaPath.value = ''; return;
   }
 
-  const points = data.map((val, idx) => {
+  const points = data.map((point, idx) => {
     const x = (idx / (length - 1)) * width;
-    const y = height - (val * height) + 5; 
+    const y = height - (point.value * height) + 5;
     return { x, y };
   });
 
@@ -283,7 +487,7 @@ const generateChartData = (length: number) => {
 }
 
 onMounted(() => {
-  generateChartData(timeRanges[currentTimeRange.value].points)
+  generateChartData(timeRanges[currentTimeRange.value])
 })
 </script>
 
@@ -297,20 +501,12 @@ onMounted(() => {
   box-sizing: border-box;
 }
 
-/* ✨ 满血复活的左侧效能洞察面板 ✨ */
+/* 效能洞察面板 */
 .insights-panel {
-  width: 100%;
-  background: var(--vcp-bg-card, #FFFFFF);
-  border: 1px solid rgba(62, 58, 54, 0.06);
-  border-radius: 16px;
-  padding: 24px 32px;
-  box-shadow: 0 4px 20px rgba(62, 58, 54, 0.03);
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
+  width: 100%; background: var(--vcp-bg-card, #FFFFFF); border: 1px solid rgba(62, 58, 54, 0.06);
+  border-radius: 16px; padding: 24px 32px; box-shadow: 0 4px 20px rgba(62, 58, 54, 0.03);
+  display: flex; flex-direction: column; flex-shrink: 0;
 }
-
-/* 内部细节样式保留 */
 .panel-header { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 24px; }
 .panel-title { display: flex; align-items: center; font-size: 16px; font-weight: 600; color: var(--color-primary, #4A9D9A); }
 .interactive-badge { cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s ease; user-select: none; }
@@ -324,16 +520,17 @@ onMounted(() => {
 .stat-unit { font-size: 13px; font-weight: 600; color: var(--vcp-text-sub, #8C847A); }
 .chart-group { flex: 1; display: flex; flex-direction: column; justify-content: center; }
 .chart-label { font-size: 12px; font-weight: 600; color: var(--vcp-text-sub, #8C847A); margin-bottom: 12px; text-align: right; }
-
-/* 防止热力图被右上角的悬浮舱挡住最右边的数据 */
-.chart-wrapper { position: relative; height: 90px; display: flex; flex-direction: column; justify-content: flex-end; padding-right: 200px; }
-
-.sparkline-container { position: absolute; top: 0; left: 0; right: 200px; height: 70px; pointer-events: none; transition: all 0.3s ease; }
+.chart-wrapper { position: relative; height: 108px; display: flex; flex-direction: column; justify-content: flex-end; padding-right: 72px; padding-bottom: 20px; }
+.sparkline-container { position: absolute; top: 0; left: 0; right: 72px; height: 70px; pointer-events: none; transition: all 0.3s ease; }
 .sparkline-svg { width: 100%; height: 100%; overflow: visible; }
 .glow-point { filter: drop-shadow(0 0 6px rgba(244,63,94,0.8)); transition: cy 0.3s ease; }
-.heatmap-container { display: flex; justify-content: space-between; align-items: flex-end; height: 16px; z-index: 2; transition: gap 0.3s ease; }
-.heat-cube { flex: 1; height: 16px; min-width: 1px; transition: all 0.3s ease; }
+.heatmap-container { display: flex; justify-content: space-between; align-items: flex-end; height: 16px; margin-bottom: 10px; transform: translateY(-4px); z-index: 2; transition: gap 0.3s ease; }
+.heat-cube { flex: 1; height: 14px; min-width: 4px; transition: all 0.3s ease; }
 .heat-cube:hover { transform: translateY(-2px) scale(1.1); filter: brightness(1.1); }
+.heatmap-axis { position: relative; height: 16px; margin-top: 0; z-index: 2; color: var(--vcp-text-sub, #8C847A); font-size: 10px; font-weight: 600; opacity: 0.7; }
+.heatmap-axis span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.heatmap-axis span:first-child { transform: translateX(0); }
+.heatmap-axis span:last-child { transform: translateX(-100%); }
 
 /* 目标池网格 */
 .pools-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; flex: 1; min-height: 0; }
@@ -349,14 +546,90 @@ onMounted(() => {
 .pool-col:hover .pool-list::-webkit-scrollbar-thumb { background: rgba(62, 58, 54, 0.15); }
 .pool-list::-webkit-scrollbar-thumb:hover { background: rgba(62, 58, 54, 0.25); }
 .empty-state { text-align: center; color: var(--vcp-text-sub, #8C847A); font-size: 13px; font-weight: 500; padding: 32px 0; border: 2px dashed rgba(62, 58, 54, 0.1); border-radius: 12px; }
+
+/* 🌟 全域排期雷达 (Gantt) 专属样式 🌟 */
+.gantt-dialog-body { 
+  display: flex; 
+  flex-direction: column; 
+  height: 75vh; 
+  background: var(--vcp-bg-column, #FAFAF8); 
+  border-radius: 12px; 
+  overflow: hidden; 
+}
+.gantt-toolbar { 
+  padding: 16px 24px; 
+  background: var(--vcp-bg-card, #FFFFFF); 
+  border-bottom: 1px solid rgba(62, 58, 54, 0.08); 
+  display: flex; 
+  justify-content: space-between; /* 左右分列 */
+  align-items: center; 
+  z-index: 10;
+}
+.toolbar-group {
+  display: flex;
+  align-items: center;
+}
+.right-filters {
+  display: flex;
+  align-items: center;
+  gap: 24px; /* 右侧过滤器内部间距 */
+}
+.toolbar-title { 
+  font-size: 13px; 
+  font-weight: 600; 
+  color: var(--vcp-text-sub); 
+  margin-right: 12px; 
+  display: flex;
+  align-items: center;
+}
+:deep(.vcp-custom-select .el-input__wrapper) {
+  background: var(--vcp-bg-column, #F5F4EE);
+  border: 1px solid rgba(62, 58, 54, 0.05);
+  box-shadow: none !important;
+  border-radius: 8px;
+}
+:deep(.vcp-custom-select:hover .el-input__wrapper) {
+  border-color: var(--color-primary, #4A9D9A);
+}
+:deep(.vcp-custom-select .el-input__inner) {
+  font-weight: 600;
+  color: var(--vcp-text-main);
+}
+.gantt-wrapper { 
+  flex: 1; 
+  min-height: 0; 
+  padding: 16px; 
+}
 </style>
 
 <style>
+/* 全局覆盖样式 */
 .vcp-custom-dropdown { background: var(--vcp-bg-card, #FFFFFF) !important; border: 1px solid rgba(62, 58, 54, 0.08) !important; border-radius: 12px !important; box-shadow: 0 10px 25px rgba(62, 58, 54, 0.06) !important; padding: 8px !important; }
 .vcp-custom-dropdown .el-dropdown-menu__item { color: var(--vcp-text-main, #3E3A36) !important; border-radius: 6px !important; font-weight: 500 !important; padding: 8px 16px !important; margin-bottom: 2px !important; }
 .vcp-custom-dropdown .el-dropdown-menu__item:hover { background-color: rgba(62, 58, 54, 0.04) !important; }
 .vcp-custom-dropdown .el-dropdown-menu__item.is-active { color: var(--color-primary, #4A9D9A) !important; background-color: rgba(74, 157, 154, 0.08) !important; font-weight: 600 !important; }
-.vcp-custom-dialog { border-radius: 16px !important; overflow: hidden; }
-.vcp-custom-dialog .el-dialog__header { margin-right: 0 !important; padding: 20px 24px !important; border-bottom: 1px solid rgba(62, 58, 54, 0.06); }
-.vcp-custom-dialog .el-dialog__title { font-weight: 600 !important; color: var(--vcp-text-main) !important; }
+
+/* 扩大 Dialog 宽度，给予甘特图充分的空间 */
+.gantt-custom-dialog { border-radius: 16px !important; overflow: hidden; }
+.gantt-custom-dialog .el-dialog__header { margin-right: 0 !important; padding: 20px 24px 16px 24px !important; border-bottom: 1px solid rgba(62, 58, 54, 0.06); background: var(--vcp-bg-card, #FFFFFF); }
+.gantt-custom-dialog .el-dialog__title { font-weight: 600 !important; color: var(--vcp-text-main) !important; font-size: 18px; }
+.gantt-custom-dialog .el-dialog__body { padding: 0 !important; background: var(--vcp-bg-column, #FAFAF8); }
+
+/* VCP Radio Button 美化 */
+.vcp-radio-group .el-radio-button__inner {
+  border: 1px solid rgba(62, 58, 54, 0.1) !important;
+  background: transparent !important;
+  color: var(--vcp-text-sub) !important;
+  font-weight: 500 !important;
+  box-shadow: none !important;
+}
+.vcp-radio-group .el-radio-button:first-child .el-radio-button__inner { border-radius: 6px 0 0 6px !important; }
+.vcp-radio-group .el-radio-button:last-child .el-radio-button__inner { border-radius: 0 6px 6px 0 !important; }
+.vcp-radio-group .el-radio-button__original-radio:checked + .el-radio-button__inner {
+  background: var(--color-primary, #4A9D9A) !important;
+  border-color: var(--color-primary, #4A9D9A) !important;
+  color: #FFF !important;
+  box-shadow: 0 2px 6px rgba(74, 157, 154, 0.3) !important;
+  font-weight: 600 !important;
+}
 </style>

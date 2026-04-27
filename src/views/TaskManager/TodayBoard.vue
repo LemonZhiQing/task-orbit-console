@@ -24,7 +24,10 @@
       </div>
     </div>
 
-    <DetailDrawer :visible="isDrawerOpen" :task-id="selectedTaskId" @close="isDrawerOpen = false" />
+    <!-- 沉浸式详情抽屉：Teleport 到 body，避免被左右悬浮框的 stacking context 压住，与目标排期保持一致 -->
+    <Teleport to="body">
+      <DetailDrawer :visible="isDrawerOpen" :task-id="selectedTaskId" @close="isDrawerOpen = false" />
+    </Teleport>
   </div>
 </template>
 

@@ -1,9 +1,6 @@
 <template>
   <div class="planning-center-container">
     
-    <!-- 🌟 脱离文档流的全局级挂件 🌟 -->
-    <MiniTimelineWidget @expand="isTimelineDialogOpen = true" />
-
     <!-- 左侧：恢复满血 100% 宽度的效能洞察大卡片，不再让路 -->
     <div class="insights-panel">
       <div class="panel-header">
@@ -153,76 +150,11 @@
       </div>
     </div>
 
-    <!-- 沉浸式详情抽屉 -->
-    <DetailDrawer :visible="isDrawerOpen" :task-id="selectedTaskId" @close="isDrawerOpen = false" />
+    <!-- 沉浸式详情抽屉：Teleport 到 body，避免被全域排期雷达的弹层 stacking context 压住 -->
+    <Teleport to="body">
+      <DetailDrawer :visible="isDrawerOpen" :task-id="selectedTaskId" @close="isDrawerOpen = false" />
+    </Teleport>
     
-    <!-- 全域时间线对话框 (Gantt) -->
-    <el-dialog
-      v-model="isTimelineDialogOpen"
-      title="全域排期雷达 (Timeline)"
-      width="92%"
-      class="vcp-custom-dialog gantt-custom-dialog"
-      align-center
-      destroy-on-close
-      append-to-body
-      :lock-scroll="false"
-    >
-      <div class="gantt-dialog-body">
-        <!-- 顶部多维控制台 (优雅分离) -->
-        <div class="gantt-toolbar">
-          
-          <!-- 左侧：缩放控制 -->
-          <div class="toolbar-group left-group">
-            <span class="toolbar-title">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-              缩放：
-            </span>
-            <el-radio-group v-model="currentZoom" size="small" class="vcp-radio-group">
-              <el-radio-button value="day">天 (Day)</el-radio-button>
-              <el-radio-button value="week">周 (Week)</el-radio-button>
-              <el-radio-button value="month">月 (Month)</el-radio-button>
-              <el-radio-button value="quarter">季度 (Quarter)</el-radio-button>
-              <el-radio-button value="year">年 (Year)</el-radio-button>
-            </el-radio-group>
-          </div>
-
-          <!-- 右侧：过滤器组合 -->
-          <div class="right-filters">
-            <div class="toolbar-group">
-               <span class="toolbar-title">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
-                层级：
-              </span>
-              <el-select v-model="filterPeriod" size="small" style="width: 140px;" class="vcp-custom-select">
-                <el-option label="所有层级" value="all" />
-                <el-option label="长期宏图 (Epic)" value="long_term" />
-                <el-option label="短期目标 (Story)" value="short_term" />
-                <el-option label="今日冲刺 (Task)" value="daily" />
-              </el-select>
-            </div>
-
-            <div class="toolbar-group">
-               <span class="toolbar-title">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                状态：
-              </span>
-              <el-select v-model="filterStatus" size="small" style="width: 140px;" class="vcp-custom-select">
-                <el-option label="全部状态" value="all" />
-                <el-option label="进行中 (活期)" value="active" />
-                <el-option label="已完结/过期" value="done_or_expired" />
-              </el-select>
-            </div>
-          </div>
-
-        </div>
-
-        <!-- DHTMLX Gantt 组件挂载点 (v-if 魔法：延迟加载，确保 DOM 已挂载) -->
-        <div class="gantt-wrapper">
-          <GanttChart v-if="isTimelineDialogOpen" :tasks="ganttTasks" :zoomLevel="currentZoom" @task-selected="openDetail" />
-        </div>
-      </div>
-    </el-dialog>
-
   </div>
 </template>
 
@@ -230,8 +162,6 @@
 import { computed, ref, onMounted } from 'vue'
 import TaskCard from './components/TaskCard.vue'
 import DetailDrawer from './components/DetailDrawer.vue'
-import MiniTimelineWidget from './components/MiniTimelineWidget.vue'
-import GanttChart from '@/components/GanttChart.vue' // ✅ 引入晴天刚刚打造的包装组件
 import { useTaskStore } from '@/stores/taskStore'
 
 const store = useTaskStore()
@@ -252,107 +182,6 @@ const openDetail = (taskId: string) => {
   selectedTaskId.value = taskId
   isDrawerOpen.value = true
 }
-
-const isTimelineDialogOpen = ref(false)
-const currentZoom = ref('month') // 默认视图级别：月
-
-// V4.0 新增过滤维度
-const filterPeriod = ref('all') 
-const filterStatus = ref('all')
-
-// 🌟 核心：将 Store 中的任务转换为 DHTMLX 认识的 JSON 格式 (带多维过滤)
-const ganttTasks = computed(() => {
-  let allTasks = [
-    ...store.longTermTasks, 
-    ...store.shortTermTasks, 
-    ...store.normalizedTaskList.filter(t => t.period === 'daily')
-  ]
-
-  // 1. 层级维度过滤
-  if (filterPeriod.value !== 'all') {
-     allTasks = allTasks.filter(t => t.period === filterPeriod.value)
-  }
-
-  // 2. 状态维度过滤 (利用当前时间对比截止日，以及 kanban_col)
-  const now = Date.now()
-  if (filterStatus.value === 'active') {
-     allTasks = allTasks.filter(t => t.kanban_col !== 'done' && (!t.due_date || t.due_date >= now))
-  } else if (filterStatus.value === 'done_or_expired') {
-     allTasks = allTasks.filter(t => t.kanban_col === 'done' || (t.due_date && t.due_date < now))
-  }
-  
-  // 建立一个全局可用的 ID 集合，用来做“孤儿检测”
-  const validIds = new Set(allTasks.map(t => t.id))
-  
-  const data = allTasks.map(t => {
-    // 1. 起始时间计算
-    const startDate = t.plan_date ? new Date(t.plan_date) : new Date(t.created_at || Date.now());
-    
-    // 2. 截止时间计算
-    let endDate;
-    if (t.due_date) {
-       endDate = new Date(t.due_date);
-    } else {
-       endDate = new Date(startDate);
-       if (t.period === 'long_term') endDate.setMonth(endDate.getMonth() + 1);
-       else if (t.period === 'short_term') endDate.setDate(endDate.getDate() + 7);
-       else endDate.setHours(endDate.getHours() + 2); // 💡 今日任务默认只占 2 个小时！避免横跨整天
-    }
-    if (endDate.getTime() <= startDate.getTime()) {
-       // 防重合：日常任务加2小时，跨度任务加24小时
-       const padding = t.period === 'daily' ? 2 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
-       endDate = new Date(startDate.getTime() + padding); 
-    }
-
-    // 3. 进度计算
-    let progress = 0;
-    if (t.kanban_col === 'done') progress = 1;
-    else if (t.kanban_col === 'in_progress') progress = 0.5;
-    else if (t.planned_amount && t.planned_amount > 0) {
-       progress = Math.min(1, (t.completed_amount || 0) / t.planned_amount);
-    }
-
-    // 4. 树形孤儿修复 (如果指定的 parentId 在本批数据中找不到，强制降级为顶层)
-    let parentId: string | number = t.parent_id || t.project || 0;
-    if (typeof parentId === 'string' && !validIds.has(parentId)) {
-       parentId = 0;
-    }
-    
-    // 5. 颜色指派：实现“底槽空轨+实体进度”的视觉分离
-    let renderType = t.period === 'long_term' ? 'project' : 'task';
-    let themeColor = t.color; // 提取用户的灵感专属色
-    
-    if (!themeColor) {
-        // 如果用户没选颜色，采用阶梯降级色卡
-        if (t.period === 'long_term') {
-           themeColor = '#3E3A36'; 
-        } else if (t.period === 'short_term') {
-           themeColor = '#516B91'; 
-        } else {
-           themeColor = '#4A9D9A'; 
-        }
-    }
-
-    return {
-      id: t.id,
-      text: t.title || '未命名任务',
-      start_date: startDate,
-      end_date: endDate,
-      parent: parentId, 
-      progress: progress,
-      type: renderType,
-      // 🚨 核心视觉改动：color 决定了整个 Bar 的底层背景，我们用极浅的灰色作为“空轨”
-      color: 'rgba(62, 58, 54, 0.08)',
-      // progressColor 决定了里面填色的进度，我们注入真实的绚丽色彩
-      progressColor: themeColor,
-      // 额外把真实的颜色打包传给外层，供百分比文本渲染使用
-      themeColor: themeColor,
-      open: true 
-    }
-  });
-
-  return { data, links: [] };
-})
 
 const quickAdd = (periodType: string) => {
   const now = new Date()
@@ -547,59 +376,6 @@ onMounted(() => {
 .pool-list::-webkit-scrollbar-thumb:hover { background: rgba(62, 58, 54, 0.25); }
 .empty-state { text-align: center; color: var(--vcp-text-sub, #8C847A); font-size: 13px; font-weight: 500; padding: 32px 0; border: 2px dashed rgba(62, 58, 54, 0.1); border-radius: 12px; }
 
-/* 🌟 全域排期雷达 (Gantt) 专属样式 🌟 */
-.gantt-dialog-body { 
-  display: flex; 
-  flex-direction: column; 
-  height: 75vh; 
-  background: var(--vcp-bg-column, #FAFAF8); 
-  border-radius: 12px; 
-  overflow: hidden; 
-}
-.gantt-toolbar { 
-  padding: 16px 24px; 
-  background: var(--vcp-bg-card, #FFFFFF); 
-  border-bottom: 1px solid rgba(62, 58, 54, 0.08); 
-  display: flex; 
-  justify-content: space-between; /* 左右分列 */
-  align-items: center; 
-  z-index: 10;
-}
-.toolbar-group {
-  display: flex;
-  align-items: center;
-}
-.right-filters {
-  display: flex;
-  align-items: center;
-  gap: 24px; /* 右侧过滤器内部间距 */
-}
-.toolbar-title { 
-  font-size: 13px; 
-  font-weight: 600; 
-  color: var(--vcp-text-sub); 
-  margin-right: 12px; 
-  display: flex;
-  align-items: center;
-}
-:deep(.vcp-custom-select .el-input__wrapper) {
-  background: var(--vcp-bg-column, #F5F4EE);
-  border: 1px solid rgba(62, 58, 54, 0.05);
-  box-shadow: none !important;
-  border-radius: 8px;
-}
-:deep(.vcp-custom-select:hover .el-input__wrapper) {
-  border-color: var(--color-primary, #4A9D9A);
-}
-:deep(.vcp-custom-select .el-input__inner) {
-  font-weight: 600;
-  color: var(--vcp-text-main);
-}
-.gantt-wrapper { 
-  flex: 1; 
-  min-height: 0; 
-  padding: 16px; 
-}
 </style>
 
 <style>
@@ -609,27 +385,4 @@ onMounted(() => {
 .vcp-custom-dropdown .el-dropdown-menu__item:hover { background-color: rgba(62, 58, 54, 0.04) !important; }
 .vcp-custom-dropdown .el-dropdown-menu__item.is-active { color: var(--color-primary, #4A9D9A) !important; background-color: rgba(74, 157, 154, 0.08) !important; font-weight: 600 !important; }
 
-/* 扩大 Dialog 宽度，给予甘特图充分的空间 */
-.gantt-custom-dialog { border-radius: 16px !important; overflow: hidden; }
-.gantt-custom-dialog .el-dialog__header { margin-right: 0 !important; padding: 20px 24px 16px 24px !important; border-bottom: 1px solid rgba(62, 58, 54, 0.06); background: var(--vcp-bg-card, #FFFFFF); }
-.gantt-custom-dialog .el-dialog__title { font-weight: 600 !important; color: var(--vcp-text-main) !important; font-size: 18px; }
-.gantt-custom-dialog .el-dialog__body { padding: 0 !important; background: var(--vcp-bg-column, #FAFAF8); }
-
-/* VCP Radio Button 美化 */
-.vcp-radio-group .el-radio-button__inner {
-  border: 1px solid rgba(62, 58, 54, 0.1) !important;
-  background: transparent !important;
-  color: var(--vcp-text-sub) !important;
-  font-weight: 500 !important;
-  box-shadow: none !important;
-}
-.vcp-radio-group .el-radio-button:first-child .el-radio-button__inner { border-radius: 6px 0 0 6px !important; }
-.vcp-radio-group .el-radio-button:last-child .el-radio-button__inner { border-radius: 0 6px 6px 0 !important; }
-.vcp-radio-group .el-radio-button__original-radio:checked + .el-radio-button__inner {
-  background: var(--color-primary, #4A9D9A) !important;
-  border-color: var(--color-primary, #4A9D9A) !important;
-  color: #FFF !important;
-  box-shadow: 0 2px 6px rgba(74, 157, 154, 0.3) !important;
-  font-weight: 600 !important;
-}
 </style>

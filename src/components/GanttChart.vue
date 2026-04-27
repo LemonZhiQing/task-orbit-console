@@ -15,11 +15,16 @@ const props = defineProps({
   zoomLevel: {
     type: String,
     default: 'month'
+  },
+  todaySignal: {
+    type: Number,
+    default: 0
   }
 })
 
-const emit = defineEmits(['task-updated', 'task-selected'])
+const emit = defineEmits(['task-updated', 'task-selected', 'task-dblclick'])
 const ganttContainer = ref(null)
+const eventIds = []
 
 onMounted(() => {
   // 🇨🇳 手工注入中文本地化
@@ -62,28 +67,33 @@ onMounted(() => {
   // 💡 激活外部注入的自定义色彩皮肤
   gantt.templates.task_class = function(start, end, task){
     if (task.color) {
-      task.color = task.color; 
+      task.color = task.color;
     }
-    return "";
+    return [task.overdue ? "vcp-overdue-task" : "", task.context ? "vcp-context-task" : ""].filter(Boolean).join(" ");
   };
 
   // 3. 缩放配置
   const zoomConfig = {
     levels: [
       { name: "day", scale_height: 50, min_column_width: 60, scales: [{ unit: "day", step: 1, format: "%m月%d日" }, { unit: "hour", step: 1, format: "%H:00" }] },
-      { name: "week", scale_height: 50, min_column_width: 40, scales: [{ unit: "week", step: 1, format: "第 %W 周" }, { unit: "day", step: 1, format: "%D" }] }, 
-      { name: "month", scale_height: 50, min_column_width: 120, scales: [{ unit: "month", step: 1, format: "%Y年 %m月" }, { unit: "week", step: 1, format: "第 %W 周" }] },
-      { name: "quarter", scale_height: 50, min_column_width: 90, scales: [{ unit: "month", step: 1, format: "%m月" }, { unit: "quarter", step: 1, format: function (date) { const d = gantt.date.date_to_str("%Y年 第%q季度"); return d(date); } }] },
-      { name: "year", scale_height: 50, min_column_width: 30, scales: [{ unit: "year", step: 1, format: "%Y年" }] }
+      { name: "week", scale_height: 50, min_column_width: 64, scales: [{ unit: "week", step: 1, format: "第 %W 周" }, { unit: "day", step: 1, format: "%m/%d %D" }] },
+      { name: "month", scale_height: 50, min_column_width: 42, scales: [{ unit: "month", step: 1, format: "%Y年 %m月" }, { unit: "day", step: 1, format: "%d" }] },
+      { name: "quarter", scale_height: 50, min_column_width: 80, scales: [{ unit: "quarter", step: 1, format: function (date) { const d = gantt.date.date_to_str("%Y年 第%q季度"); return d(date); } }, { unit: "month", step: 1, format: "%m月" }] },
+      { name: "year", scale_height: 50, min_column_width: 96, scales: [{ unit: "year", step: 1, format: "%Y年" }, { unit: "month", step: 1, format: "%m月" }] }
     ]
   };
 
   gantt.ext.zoom.init(zoomConfig);
 
-  gantt.attachEvent("onTaskClick", (id) => {
+  eventIds.push(gantt.attachEvent("onTaskClick", (id) => {
     emit('task-selected', id);
     return true;
-  });
+  }));
+
+  eventIds.push(gantt.attachEvent("onTaskDblClick", (id) => {
+    emit('task-dblclick', id);
+    return false;
+  }));
 
   // 护盾：等待弹窗 DOM 挂载
   nextTick(() => {
@@ -95,38 +105,80 @@ onMounted(() => {
   });
 })
 
-// 自动缩紧时间线算法
+const getPreciseScaleRange = () => {
+  const now = new Date();
+  const start = new Date(now);
+  const end = new Date(now);
+
+  if (props.zoomLevel === 'day') {
+    start.setHours(0, 0, 0, 0);
+    end.setHours(24, 0, 0, 0);
+  } else if (props.zoomLevel === 'week') {
+    const day = start.getDay() || 7;
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - day + 1);
+    end.setTime(start.getTime());
+    end.setDate(start.getDate() + 7);
+  } else if (props.zoomLevel === 'month') {
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    end.setTime(start.getTime());
+    end.setMonth(start.getMonth() + 1, 1);
+  } else if (props.zoomLevel === 'quarter') {
+    const quarterStartMonth = Math.floor(start.getMonth() / 3) * 3;
+    start.setMonth(quarterStartMonth, 1);
+    start.setHours(0, 0, 0, 0);
+    end.setTime(start.getTime());
+    end.setMonth(quarterStartMonth + 3, 1);
+  } else if (props.zoomLevel === 'year') {
+    start.setMonth(0, 1);
+    start.setHours(0, 0, 0, 0);
+    end.setTime(start.getTime());
+    end.setFullYear(start.getFullYear() + 1, 0, 1);
+  } else {
+    start.setDate(start.getDate() - 15);
+    end.setDate(end.getDate() + 15);
+  }
+
+  return { start, end };
+}
+
+// 按当前缩放级别精确锁定横轴：天=今天，周=本周，月=本月，季度=本季度，年=今年
 const updateGanttDataAndScale = (tasksData) => {
   if (!ganttContainer.value) return;
 
   gantt.clearAll();
+  const scaleRange = getPreciseScaleRange();
+  gantt.config.start_date = scaleRange.start;
+  gantt.config.end_date = scaleRange.end;
   
   if (!tasksData || !tasksData.data || tasksData.data.length === 0) {
-    gantt.config.start_date = null;
-    gantt.config.end_date = null;
+    ensureTodayMarker();
+    gantt.render();
     return;
   }
 
-  let minDate = new Date(tasksData.data[0].start_date);
-  let maxDate = new Date(tasksData.data[0].end_date);
-
-  tasksData.data.forEach(task => {
-    const s = new Date(task.start_date);
-    const e = new Date(task.end_date);
-    if (s < minDate) minDate = s;
-    if (e > maxDate) maxDate = e;
-  });
-
-  const startPadding = new Date(minDate);
-  startPadding.setDate(startPadding.getDate() - 3);
-  const endPadding = new Date(maxDate);
-  endPadding.setDate(endPadding.getDate() + 7);
-
-  gantt.config.start_date = startPadding;
-  gantt.config.end_date = endPadding;
-  
   gantt.parse(tasksData);
+  ensureTodayMarker();
   gantt.render();
+}
+
+const ensureTodayMarker = () => {
+  if (!ganttContainer.value) return;
+  gantt.deleteMarker?.('vcp-today-marker');
+  gantt.addMarker?.({
+    id: 'vcp-today-marker',
+    start_date: new Date(),
+    css: 'vcp-today-marker',
+    text: '今天',
+    title: '今天'
+  });
+}
+
+const showToday = () => {
+  if (!ganttContainer.value) return;
+  ensureTodayMarker();
+  gantt.showDate(new Date());
 }
 
 watch(() => props.tasks, (newTasks) => {
@@ -136,11 +188,21 @@ watch(() => props.tasks, (newTasks) => {
 watch(() => props.zoomLevel, (newZoom) => {
   if (newZoom) {
     gantt.ext.zoom.setLevel(newZoom);
+    updateGanttDataAndScale(props.tasks);
   }
 })
 
+watch(() => props.todaySignal, () => {
+  showToday();
+})
+
 onUnmounted(() => {
+  eventIds.forEach(eventId => gantt.detachEvent(eventId));
+  eventIds.length = 0;
+  gantt.deleteMarker?.('vcp-today-marker');
   gantt.clearAll();
+  gantt.config.start_date = null;
+  gantt.config.end_date = null;
 })
 </script>
 
@@ -201,5 +263,29 @@ onUnmounted(() => {
 }
 .vcp-minimal-gantt .gantt_project .gantt_task_progress {
   border-radius: 8px !important;
+}
+.vcp-minimal-gantt .vcp-overdue-task .gantt_task_line,
+.vcp-minimal-gantt .gantt_task_line.vcp-overdue-task {
+  border-color: rgba(244, 63, 94, 0.75) !important;
+  box-shadow: inset 0 2px 4px rgba(244, 63, 94, 0.08), 0 0 0 1px rgba(244, 63, 94, 0.18) !important;
+}
+.vcp-minimal-gantt .vcp-context-task {
+  opacity: 0.58;
+}
+.vcp-minimal-gantt .vcp-context-task .gantt_task_line {
+  border-style: dashed !important;
+}
+.vcp-minimal-gantt .vcp-today-marker {
+  background: #F43F5E !important;
+  width: 2px !important;
+}
+.vcp-minimal-gantt .vcp-today-marker .gantt_marker_content {
+  background: #F43F5E !important;
+  color: #fff !important;
+  border-radius: 999px !important;
+  padding: 2px 8px !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  transform: translateX(-50%);
 }
 </style>

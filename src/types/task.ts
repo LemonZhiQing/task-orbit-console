@@ -54,6 +54,10 @@ export interface ITaskItem {
   planned_amount?: number;
   completed_amount?: number;
   unit?: string | null;
+  effective_actual_pomodoros?: number;
+  effective_completed_amount?: number;
+  aggregated_children_count?: number;
+  has_aggregated_metrics?: boolean;
 
   // === 4. 描述与记录 ===
   project?: string | null;

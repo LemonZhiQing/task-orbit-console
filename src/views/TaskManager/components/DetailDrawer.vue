@@ -5,9 +5,14 @@
         
         <!-- 头部标签 -->
         <div class="drawer-header">
-          <div class="header-tags">
-            <span class="period-tag">{{ periodName(task.period) }}</span>
-            <span v-if="task.creator_agent" class="agent-tag">🤖 {{ task.creator_agent }}</span>
+          <div class="header-left">
+            <button v-if="navigationStack.length" class="back-btn" @click="goBackToParent">
+              ← 返回上一级
+            </button>
+            <div class="header-tags">
+              <span class="period-tag">{{ periodName(task.period) }}</span>
+              <span v-if="task.creator_agent" class="agent-tag">🤖 {{ task.creator_agent }}</span>
+            </div>
           </div>
           <button class="close-btn" @click="closeDrawer">✕</button>
         </div>
@@ -53,10 +58,11 @@
           <!-- 专属主题色 (Color Picker) -->
           <div class="attr-row">
             <span class="attr-icon">🎨</span><span class="attr-label">颜色</span>
-            <el-color-picker 
-              v-model="task.color" 
-              size="small" 
-              @change="saveTask" 
+            <el-color-picker
+              v-model="task.color"
+              size="small"
+              popper-class="vcp-drawer-popper"
+              @change="saveTask"
               :predefine="['#4A9D9A', '#3E3A36', '#516B91', '#81C784', '#F43F5E', '#F59E0B', '#8B5CF6', '#10B981', '#3B82F6']"
               style="margin-left: 4px;"
             />
@@ -65,11 +71,12 @@
           <!-- 所属项目 (解除封印，如果没选则提示没有长任务) -->
           <div class="attr-row">
             <span class="attr-icon">🎯</span><span class="attr-label">项目</span>
-            <el-select 
-              v-model="task.project" 
-              class="borderless-select-component" 
-              :placeholder="parentCandidates.length > 0 ? '未归属项目' : '该层级暂无可用父项目'" 
-              filterable 
+            <el-select
+              v-model="task.project"
+              class="borderless-select-component"
+              popper-class="vcp-drawer-popper"
+              :placeholder="parentCandidates.length > 0 ? '未归属项目' : '该层级暂无可用父项目'"
+              filterable
               clearable
               @change="saveTask"
             >
@@ -92,6 +99,7 @@
               format="YYYY/MM/DD"
               value-format="x"
               class="borderless-date-picker"
+              popper-class="vcp-drawer-popper"
               :clearable="true"
               @change="saveTask"
             />
@@ -107,6 +115,7 @@
               format="YYYY/MM/DD"
               value-format="x"
               class="borderless-date-picker"
+              popper-class="vcp-drawer-popper"
               :clearable="true"
               @change="saveTask"
             />
@@ -116,7 +125,10 @@
           <div class="attr-row">
             <span class="attr-icon">🍅</span><span class="attr-label">番茄钟</span>
             <div class="flex-inputs">
-              <input type="number" v-model.number="task.actual_pomodoros" class="attr-value micro-input" @blur="saveTask" placeholder="实际" />
+              <span
+                class="readonly-metric"
+                :title="task.has_aggregated_metrics ? '实际番茄钟来自子任务汇总' : '实际番茄钟由系统统计，不能手动编辑'"
+              >{{ task.has_aggregated_metrics ? 'Σ ' : '' }}{{ displayActualPomodoros }}</span>
               <span class="slash">/</span>
               <input type="number" v-model.number="task.planned_pomodoros" class="attr-value micro-input" @blur="saveTask" placeholder="计划" />
             </div>
@@ -126,7 +138,10 @@
           <div class="attr-row" style="grid-column: span 2;">
             <span class="attr-icon">📈</span><span class="attr-label">任务量</span>
             <div class="flex-inputs">
-              <input type="number" v-model.number="task.completed_amount" class="attr-value micro-input" @blur="saveTask" placeholder="已完" />
+              <span
+                class="readonly-metric"
+                :title="task.has_aggregated_metrics ? '实际完成量来自子任务汇总' : '实际完成量由系统统计，不能手动编辑'"
+              >{{ task.has_aggregated_metrics ? 'Σ ' : '' }}{{ displayCompletedAmount }}</span>
               <span class="slash">/</span>
               <input type="number" v-model.number="task.planned_amount" class="attr-value micro-input" @blur="saveTask" placeholder="总量" />
               <input type="text" v-model="task.unit" class="attr-value micro-input" style="width:60px; margin-left:4px" placeholder="单位" @blur="saveTask" />
@@ -139,6 +154,36 @@
             <input type="text" v-model="formStrings.tags" class="attr-value borderless-input" placeholder="输入普通标签，逗号分隔" @blur="saveTask" />
           </div>
 
+        </div>
+
+        <!-- 子任务列表：短期 / 长期目标专属 -->
+        <div v-if="showChildTasks" class="children-section">
+          <div class="section-title children-title">
+            <span>🧩 子任务列表</span>
+            <span class="children-count">{{ childTasks.length }}</span>
+          </div>
+          <div v-if="childTasks.length" class="children-list">
+            <button
+              v-for="child in childTasks"
+              :key="child.id"
+              type="button"
+              class="child-task-card"
+              :class="`child-status-${child.kanban_col}`"
+              @click="openChildTask(child.id)"
+            >
+              <div class="child-main">
+                <span class="child-period">{{ periodName(child.period) }}</span>
+                <span class="child-title">{{ child.title || '未命名任务' }}</span>
+              </div>
+              <div class="child-meta">
+                <span class="child-state">{{ columnName(child.kanban_col) }}</span>
+                <span class="child-priority">{{ child.priority.toUpperCase() }}</span>
+                <span class="child-progress">{{ progressText(child) }}</span>
+                <span v-if="child.due_date" class="child-date">截止 {{ formatDate(child.due_date) }}</span>
+              </div>
+            </button>
+          </div>
+          <div v-else class="children-empty">当前目标还没有挂载子任务</div>
         </div>
 
         <!-- 备注 -->
@@ -195,7 +240,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useTaskStore } from '@/stores/taskStore'
 import { taskApi } from '@/api/task'
 import type { ITaskItem, ParentCandidate, TaskPeriod } from '@/types/task'
@@ -213,6 +258,23 @@ const localPlanDate = ref<number | null>(null)
 const localDueDate = ref<number | null>(null)
 const formStrings = ref({ knowledge_tags: '', external_urls: '', tags: '' })
 const parentCandidates = ref<ParentCandidate[]>([])
+const navigationStack = ref<{ id: string, title: string }[]>([])
+
+const displayActualPomodoros = computed(() => task.value?.effective_actual_pomodoros ?? task.value?.actual_pomodoros ?? 0)
+const displayCompletedAmount = computed(() => task.value?.effective_completed_amount ?? task.value?.completed_amount ?? 0)
+const showChildTasks = computed(() => task.value?.period === 'short_term' || task.value?.period === 'long_term')
+const childTasks = computed(() => {
+  if (!task.value) return []
+  return store.normalizedTaskList
+    .filter(item => !item.deleted_at && item.id !== task.value?.id && (item.parent_id === task.value?.id || item.project === task.value?.id))
+    .sort((a, b) => {
+      const periodWeight: Record<string, number> = { short_term: 0, daily: 1, routine: 2, long_term: 3 }
+      const columnWeight: Record<string, number> = { in_progress: 0, todo: 1, done: 2 }
+      return (periodWeight[a.period] ?? 9) - (periodWeight[b.period] ?? 9)
+        || (columnWeight[a.kanban_col] ?? 9) - (columnWeight[b.kanban_col] ?? 9)
+        || (a.sort_order || 0) - (b.sort_order || 0)
+    })
+})
 
 const fetchParentCandidates = async (period: TaskPeriod) => {
   if (!period) {
@@ -228,21 +290,28 @@ const fetchParentCandidates = async (period: TaskPeriod) => {
   }
 }
 
+const loadTask = (taskId: string) => {
+  const found = store.normalizedTaskList.find(t => t.id === taskId)
+  if (!found) return
+  task.value = JSON.parse(JSON.stringify(found))
+  localPlanDate.value = task.value.plan_date || null
+  localDueDate.value = task.value.due_date || null
+  formStrings.value.knowledge_tags = (task.value.knowledge_tags || []).join(', ')
+  formStrings.value.external_urls = (task.value.external_urls || []).join(', ')
+  formStrings.value.tags = (task.value.tags || []).join(', ')
+  fetchParentCandidates(task.value.period)
+}
+
 // 核心大管家：当抽屉打开时，一并处理所有初始化工作
-watch(() => props.visible, (newVal) => {
-  if (newVal && props.taskId) {
-    const found = store.normalizedTaskList.find(t => t.id === props.taskId)
-    if (found) {
-      task.value = JSON.parse(JSON.stringify(found))
-      localPlanDate.value = task.value.plan_date || null
-      localDueDate.value = task.value.due_date || null
-      formStrings.value.knowledge_tags = (task.value.knowledge_tags || []).join(', ')
-      formStrings.value.external_urls = (task.value.external_urls || []).join(', ')
-      formStrings.value.tags = (task.value.tags || []).join(', ')
-      
-      // 抽屉一打开，立刻强制去拉取属于这个周期的父级项目！！
-      fetchParentCandidates(task.value.period);
-    }
+watch(() => [props.visible, props.taskId] as const, ([newVal, taskId]) => {
+  if (!newVal) {
+    navigationStack.value = []
+    return
+  }
+
+  if (taskId && task.value?.id !== taskId) {
+    navigationStack.value = []
+    loadTask(taskId)
   }
 }, { immediate: true })
 
@@ -265,10 +334,49 @@ const periodName = (p: string) => {
   return map[p] || p
 }
 
+const columnName = (column: string) => {
+  const map: Record<string, string> = { todo: '待办', in_progress: '进行中', done: '已完成' }
+  return map[column] || column
+}
+
+const formatDate = (ts?: number | string | null) => {
+  if (!ts) return '未设置'
+  const d = new Date(ts)
+  return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`
+}
+
 const formatDateTime = (ts: number | string) => {
   if (!ts) return '';
   const d = new Date(ts);
   return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+const progressText = (item: ITaskItem) => {
+  const completedAmount = item.effective_completed_amount ?? item.completed_amount ?? 0
+  const actualPomodoros = item.effective_actual_pomodoros ?? item.actual_pomodoros ?? 0
+  const prefix = item.has_aggregated_metrics ? 'Σ ' : ''
+  if (item.planned_amount && item.planned_amount > 0) return `${prefix}${completedAmount}/${item.planned_amount}${item.unit || ''}`
+  if (item.planned_pomodoros && item.planned_pomodoros > 0) return `${prefix}🍅 ${actualPomodoros}/${item.planned_pomodoros}`
+  if (item.kanban_col === 'done') return '100%'
+  if (item.kanban_col === 'in_progress') return '进行中'
+  return '未开始'
+}
+
+const openChildTask = (taskId: string) => {
+  if (!task.value || task.value.id === taskId) return
+  saveTask()
+  navigationStack.value.push({
+    id: task.value.id,
+    title: task.value.title || '未命名任务'
+  })
+  loadTask(taskId)
+}
+
+const goBackToParent = () => {
+  const previousTask = navigationStack.value.pop()
+  if (!previousTask) return
+  saveTask()
+  loadTask(previousTask.id)
 }
 
 const saveTask = () => {
@@ -281,6 +389,13 @@ const saveTask = () => {
   task.value.external_urls = formStrings.value.external_urls.split(',').map(s => s.trim()).filter(Boolean)
   task.value.tags = formStrings.value.tags.split(',').map(s => s.trim()).filter(Boolean)
   
+  if (task.value.has_aggregated_metrics) {
+    delete task.value.effective_actual_pomodoros
+    delete task.value.effective_completed_amount
+    delete task.value.aggregated_children_count
+    delete task.value.has_aggregated_metrics
+  }
+
   store.updateTask(task.value.id, task.value)
 }
 
@@ -297,12 +412,16 @@ const closeDrawer = () => {
 </script>
 
 <style scoped>
-.drawer-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(62, 58, 54, 0.1); backdrop-filter: blur(2px); z-index: 1000; display: flex; justify-content: flex-end; }
+.drawer-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(62, 58, 54, 0.1); backdrop-filter: blur(2px); z-index: 20000; display: flex; justify-content: flex-end; }
 .floating-card { width: 580px; background: var(--vcp-bg-card, #fff); margin: 90px 24px 24px 0; border-radius: 20px; box-shadow: 0 10px 40px rgba(62, 58, 54, 0.1); display: flex; flex-direction: column; animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1); overflow-y: auto; }
 .floating-card::-webkit-scrollbar { display: none; }
 .drawer-inner { padding: 36px 40px; display: flex; flex-direction: column; gap: 28px; }
-.drawer-header { display: flex; justify-content: space-between; align-items: center; }
-.period-tag, .agent-tag { background: var(--vcp-bg-column, #f5f4ee); padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; color: var(--vcp-text-sub); margin-right: 8px;}
+.drawer-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.header-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.header-tags { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.back-btn { border: none; border-radius: 999px; background: rgba(74, 157, 154, 0.1); color: var(--color-primary, #4A9D9A); padding: 7px 12px; font-size: 12px; font-weight: 800; cursor: pointer; transition: all 0.2s ease; white-space: nowrap; }
+.back-btn:hover { background: var(--color-primary, #4A9D9A); color: #fff; transform: translateX(-2px); }
+.period-tag, .agent-tag { background: var(--vcp-bg-column, #f5f4ee); padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; color: var(--vcp-text-sub);}
 .close-btn { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--vcp-text-sub); transition: color 0.2s;}
 .close-btn:hover { color: var(--vcp-text-main); }
 .title-input { font-size: 26px; font-weight: 600; border: none; outline: none; width: 100%; color: var(--vcp-text-main); background: transparent; padding: 4px 0;}
@@ -318,6 +437,7 @@ const closeDrawer = () => {
 .micro-input:hover { background: rgba(62, 58, 54, 0.05); border-radius: 6px; }
 .micro-input::placeholder { font-weight: 400; opacity: 0.4; color: var(--vcp-text-sub); font-size: 12px; }
 .slash { margin: 0 4px; color: var(--vcp-text-sub); opacity: 0.5;}
+.readonly-metric { min-width: 50px; text-align: center; font-weight: 800; color: var(--color-primary, #4A9D9A); background: rgba(74,157,154,0.1); border-radius: 6px; padding: 4px 8px; }
 
 :deep(.borderless-date-picker) { flex: 1; width: auto; }
 :deep(.borderless-date-picker .el-input__wrapper) { box-shadow: none !important; background: transparent !important; padding: 0 4px !important; }
@@ -330,6 +450,22 @@ const closeDrawer = () => {
 :deep(.borderless-select-component:hover .el-input__wrapper) { background: rgba(62, 58, 54, 0.05) !important; border-radius: 6px; }
 
 .section-title { font-size: 14px; font-weight: 600; color: var(--vcp-text-main); margin-bottom: 12px; }
+.children-section { background: rgba(74, 157, 154, 0.05); border: 1px solid rgba(74, 157, 154, 0.1); border-radius: 16px; padding: 20px; }
+.children-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.children-count { min-width: 24px; height: 22px; padding: 0 8px; border-radius: 999px; background: rgba(74,157,154,0.12); color: var(--color-primary, #4A9D9A); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; }
+.children-list { display: flex; flex-direction: column; gap: 10px; }
+.child-task-card { width: 100%; border: 1px solid rgba(62, 58, 54, 0.08); background: rgba(255,255,255,0.72); border-radius: 12px; padding: 12px 14px; text-align: left; cursor: pointer; border-left: 4px solid rgba(62, 58, 54, 0.18); transition: all 0.2s ease; }
+.child-task-card:hover { transform: translateY(-1px); background: rgba(255,255,255,0.95); box-shadow: 0 10px 24px rgba(62,58,54,0.08); }
+.child-status-todo { border-left-color: #F43F5E; }
+.child-status-in_progress { border-left-color: #3B82F6; }
+.child-status-done { border-left-color: #94A3B8; }
+.child-main { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.child-period { flex: 0 0 auto; padding: 3px 8px; border-radius: 999px; background: rgba(62,58,54,0.06); color: var(--vcp-text-sub); font-size: 12px; font-weight: 700; }
+.child-title { color: var(--vcp-text-main); font-size: 14px; font-weight: 800; line-height: 1.4; }
+.child-meta { display: flex; flex-wrap: wrap; gap: 8px; color: var(--vcp-text-sub); font-size: 12px; font-weight: 700; }
+.child-meta span { padding: 3px 8px; border-radius: 999px; background: rgba(62,58,54,0.05); }
+.child-progress { color: var(--color-primary, #4A9D9A) !important; background: rgba(74,157,154,0.1) !important; }
+.children-empty { padding: 18px; border: 1px dashed rgba(62,58,54,0.14); border-radius: 12px; color: var(--vcp-text-sub); text-align: center; font-size: 13px; }
 .memo-input { width: 100%; min-height: 120px; border: 1px solid rgba(62, 58, 54, 0.08); border-radius: 12px; padding: 16px; background: var(--vcp-bg-column, #f5f4ee); resize: vertical; outline: none; color: var(--vcp-text-main); font-family: inherit; line-height: 1.6; transition: border-color 0.2s;}
 .memo-input:focus { border-color: var(--color-primary, #4A9D9A); background: var(--vcp-bg-card, #fff);}
 .review-engine-card { background: rgba(74, 157, 154, 0.05); border: 1px solid rgba(74, 157, 154, 0.1); border-radius: 16px; padding: 24px; transition: all 0.3s; }
@@ -359,4 +495,7 @@ input:checked + .slider:before { transform: translateX(20px); }
 .delete-task-btn:hover { background: #EF4444; color: white; }
 @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 .empty-state { text-align: center; padding: 100px 0; color: var(--vcp-text-sub); font-size: 18px;}
+:global(.vcp-drawer-popper) {
+  z-index: 21000 !important;
+}
 </style>

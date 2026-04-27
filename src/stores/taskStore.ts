@@ -15,7 +15,8 @@ const STORAGE_KEYS = {
 const ORDERED_COLUMNS: KanbanColumn[] = ['todo', 'in_progress', 'done']
 const ORDERED_PERIODS: TaskPeriod[] = ['daily', 'short_term', 'long_term', 'routine']
 const ORDERED_PRIORITIES: TaskPriority[] = ['p0', 'p1', 'p2', 'p3']
-const REVIEW_INTERVALS = [1, 2, 4, 7, 15, 30]
+const REVIEW_INTERVALS = [1, 2, 4, 7, 15, 30, 90, 180, 365, 1095]
+const LONG_TERM_REVIEW_INTERVAL = 1095
 
 function toTimestamp(value: unknown, fallback = Date.now()): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -120,7 +121,58 @@ export const useTaskStore = defineStore('taskStore', () => {
   const isSyncing = useStorage<boolean>(STORAGE_KEYS.syncing, false)
   const currentView = useStorage<'today' | 'planning' | 'review'>('vcp_current_view', 'today')
 
-  const normalizedTaskList = computed(() => cloneTasks(taskList.value).map(normalizeTask).filter(task => !task.deleted_at))
+  const rawNormalizedTaskList = computed(() => cloneTasks(taskList.value).map(normalizeTask).filter(task => !task.deleted_at))
+  const normalizedTaskList = computed(() => {
+    const tasks = rawNormalizedTaskList.value
+    const childrenMap = new Map<string, ITaskItem[]>()
+
+    tasks.forEach(task => {
+      const parentId = task.parent_id || task.project
+      if (!parentId) return
+      const siblings = childrenMap.get(parentId) || []
+      siblings.push(task)
+      childrenMap.set(parentId, siblings)
+    })
+
+    const aggregateCache = new Map<string, { actualPomodoros: number, completedAmount: number, childrenCount: number }>()
+    const visiting = new Set<string>()
+
+    const aggregateFor = (task: ITaskItem) => {
+      if (aggregateCache.has(task.id)) return aggregateCache.get(task.id)!
+      if (visiting.has(task.id)) return { actualPomodoros: task.actual_pomodoros || 0, completedAmount: task.completed_amount || 0, childrenCount: 0 }
+
+      visiting.add(task.id)
+      const children = childrenMap.get(task.id) || []
+      const hasChildren = children.length > 0
+      const result = children.reduce((acc, child) => {
+        const childAggregate = aggregateFor(child)
+        acc.actualPomodoros += childAggregate.actualPomodoros
+        acc.completedAmount += childAggregate.completedAmount
+        acc.childrenCount += 1 + childAggregate.childrenCount
+        return acc
+      }, {
+        actualPomodoros: hasChildren ? 0 : (task.actual_pomodoros || 0),
+        completedAmount: hasChildren ? 0 : (task.completed_amount || 0),
+        childrenCount: 0
+      })
+
+      visiting.delete(task.id)
+      aggregateCache.set(task.id, result)
+      return result
+    }
+
+    return tasks.map(task => {
+      const aggregate = aggregateFor(task)
+      const hasAggregatedMetrics = aggregate.childrenCount > 0 && (task.period === 'short_term' || task.period === 'long_term')
+      return {
+        ...task,
+        effective_actual_pomodoros: hasAggregatedMetrics ? aggregate.actualPomodoros : (task.actual_pomodoros || 0),
+        effective_completed_amount: hasAggregatedMetrics ? aggregate.completedAmount : (task.completed_amount || 0),
+        aggregated_children_count: hasAggregatedMetrics ? aggregate.childrenCount : 0,
+        has_aggregated_metrics: hasAggregatedMetrics
+      }
+    })
+  })
   const deletedTasks = computed(() => cloneTasks(taskList.value).map(normalizeTask).filter(task => task.deleted_at))
 
   const todayTasks = computed(() => normalizedTaskList.value.filter(task => task.period === 'daily'))
@@ -197,6 +249,13 @@ export const useTaskStore = defineStore('taskStore', () => {
     isHydrated.value = true
   }
 
+  function clearLocalCache() {
+    taskList.value = []
+    inboxList.value = []
+    isHydrated.value = false
+    isSyncing.value = false
+  }
+
   async function createBackup(reason = 'frontend') {
     return taskApi.createBackup(reason)
   }
@@ -230,14 +289,24 @@ export const useTaskStore = defineStore('taskStore', () => {
       normalizedTaskList.value.map(task => {
         if (task.id !== taskId) return task
         const nextCol = updates.kanban_col || task.kanban_col
+        const isCompleted = nextCol === 'done'
+        const nextPlannedPomodoros = Object.prototype.hasOwnProperty.call(updates, 'planned_pomodoros')
+          ? updates.planned_pomodoros
+          : task.planned_pomodoros
+        const nextPlannedAmount = Object.prototype.hasOwnProperty.call(updates, 'planned_amount')
+          ? updates.planned_amount
+          : task.planned_amount
+        const nextCompletedAt = Object.prototype.hasOwnProperty.call(updates, 'completed_at')
+          ? updates.completed_at
+          : isCompleted
+            ? (task.completed_at || now)
+            : null
         changedTask = normalizeTask({
           ...task,
           ...updates,
-          completed_at: Object.prototype.hasOwnProperty.call(updates, 'completed_at')
-            ? updates.completed_at
-            : nextCol === 'done'
-              ? (task.completed_at || now)
-              : null,
+          completed_at: nextCompletedAt,
+          actual_pomodoros: isCompleted ? (nextPlannedPomodoros || 1) : 0,
+          completed_amount: isCompleted ? (nextPlannedAmount || 1) : 0,
           updated_at: now,
           version: (task.version || 1) + 1
         })
@@ -315,10 +384,10 @@ export const useTaskStore = defineStore('taskStore', () => {
     if (!task) return
 
     const currentStage = task.review_info?.stage || 0
-    const nextStage = isRemembered ? Math.min(currentStage + 1, REVIEW_INTERVALS.length) : 0
-    const completed = isRemembered && nextStage >= REVIEW_INTERVALS.length
-    const interval = completed ? 0 : REVIEW_INTERVALS[nextStage] || REVIEW_INTERVALS[0]
-    const nextReviewDate = completed ? '' : dateKey(addDays(Date.now(), interval))
+    const nextStage = isRemembered ? currentStage + 1 : 0
+    const completed = false
+    const interval = REVIEW_INTERVALS[nextStage] || LONG_TERM_REVIEW_INTERVAL
+    const nextReviewDate = dateKey(addDays(Date.now(), interval))
     const historyItem: ReviewHistoryItem = {
       reviewed_at: Date.now(),
       remembered: isRemembered,
@@ -328,7 +397,7 @@ export const useTaskStore = defineStore('taskStore', () => {
     }
 
     updateTask(taskId, {
-      is_review: !completed,
+      is_review: true,
       review_info: { next_review_date: nextReviewDate, stage: nextStage, completed },
       review_history: [...(task.review_history || []), historyItem]
     })
@@ -337,6 +406,6 @@ export const useTaskStore = defineStore('taskStore', () => {
   return {
     taskList, inboxList, isHydrated, isSyncing, currentView,
     normalizedTaskList, deletedTasks, todayTasks, shortTermTasks, longTermTasks, routineTasks, reviewTasks, todayReviewTasks, focusedTask, tasksByColumn, tasksByPeriod, insights,
-    hydrateFromServer, createBackup, createTask, updateTask, removeTask, restoreTask, moveTaskColumn, setColumnTasks, setFocusedTask, moveTaskToPeriod, addInboxItem, removeInboxItem, promoteInboxToTask, markReviewTask, syncToServer
+    hydrateFromServer, clearLocalCache, createBackup, createTask, updateTask, removeTask, restoreTask, moveTaskColumn, setColumnTasks, setFocusedTask, moveTaskToPeriod, addInboxItem, removeInboxItem, promoteInboxToTask, markReviewTask, syncToServer
   }
 })

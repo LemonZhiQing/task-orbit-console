@@ -51,14 +51,15 @@ const activeLongTermCount = computed(() => store.longTermTasks.filter(isTaskActi
 .glass-effect {
   /* ✨ 终极绝杀：固定视口定位 ✨ */
   position: fixed !important;
-  top: 130px !important;  /* 避开头部的导航栏 */
-  right: 48px !important;
+  top: 150px !important;  /* 避开头部的导航栏 */
+  right: 24px !important;
   z-index: 900 !important; /* 确保它在除 Drawer 以外的最上层 */
+  box-sizing: border-box;
   
-  /* 🔪 主人的降维打击：宽度砍半，高度随内容自适应 */
-  width: 130px;
-  height: auto;
-  min-height: 160px;
+  /* 🔪 主人的降维打击：宽度砍半，高度与左侧复习雷达保持一致 */
+  width: 160px;
+  height: 184px;
+  min-height: 184px;
 
   /* 毛玻璃悬浮质感 */
   background: rgba(255, 255, 255, 0.75) !important;
@@ -70,7 +71,7 @@ const activeLongTermCount = computed(() => store.longTermTasks.filter(isTaskActi
 
 .mini-radar-widget {
   border-radius: 16px;
-  padding: 16px 14px; /* 左右内边距缩小一点，适应窄宽度 */
+  padding: 14px; /* 左右内边距缩小一点，适应窄宽度 */
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   display: flex;
@@ -84,11 +85,12 @@ const activeLongTermCount = computed(() => store.longTermTasks.filter(isTaskActi
   background: rgba(255, 255, 255, 0.95) !important;
 }
 
-.widget-header { 
-  display: flex; 
-  justify-content: space-between; 
-  align-items: center; 
-  margin-bottom: 16px; 
+.widget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-shrink: 0;
 }
 .widget-title { 
   font-size: 13px; /* 稍微调小字号适应窄体 */
@@ -118,13 +120,13 @@ const activeLongTermCount = computed(() => store.longTermTasks.filter(isTaskActi
 }
 
 /* 🎯 核心改变：横向排版(row) 变 纵向排版(column) */
-.active-stats-grid { 
-  width: 100%; 
-  display: flex; 
+.active-stats-grid {
+  width: 100%;
+  display: flex;
   flex-direction: column; /* 竖向排列 */
-  align-items: center; 
+  align-items: center;
   justify-content: center;
-  gap: 12px; /* 两个指标块之间的上下间距 */
+  gap: 8px; /* 两个指标块之间的上下间距 */
 }
 
 /* 数字模块居中展示 */
@@ -137,26 +139,26 @@ const activeLongTermCount = computed(() => store.longTermTasks.filter(isTaskActi
 }
 
 /* 原本的竖线变成一条优雅的水平虚线 */
-.stat-divider { 
+.stat-divider {
   width: 60%; /* 虚线不需要占满整个宽度，留白更好看 */
-  height: 1px; 
+  height: 1px;
   background: transparent;
-  border-bottom: 1px dashed rgba(62, 58, 54, 0.2); 
-  margin: 4px 0; 
+  border-bottom: 1px dashed rgba(62, 58, 54, 0.2);
+  margin: 2px 0;
 }
 
-.stat-num { 
-  font-size: 32px; /* 数字可以稍微再放大一点点，作为视觉核心 */
-  font-weight: 800; 
-  line-height: 1; 
-  margin-bottom: 6px; 
-  text-shadow: 0 2px 4px rgba(0,0,0,0.05); 
+.stat-num {
+  font-size: 30px; /* 数字可以稍微再放大一点点，作为视觉核心 */
+  font-weight: 800;
+  line-height: 0.95;
+  margin-bottom: 4px;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
-.stat-label { 
-  font-size: 11px; 
-  font-weight: 600; 
-  color: var(--vcp-text-sub); 
+.stat-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--vcp-text-sub);
   text-align: center;
 }
 </style>

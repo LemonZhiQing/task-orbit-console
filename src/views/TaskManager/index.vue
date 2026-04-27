@@ -14,7 +14,10 @@
       </router-view>
     </div>
 
+    <LeftPlaceholderFloat />
+    <GlobalTimelineFloat />
     <TaskOverviewFloat />
+    <RightPlaceholderFloat />
     <InboxFab />
   </div>
 </template>
@@ -23,7 +26,10 @@
 import { watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useTaskStore } from '@/stores/taskStore'
+import GlobalTimelineFloat from './components/GlobalTimelineFloat.vue'
 import InboxFab from './components/InboxFab.vue'
+import LeftPlaceholderFloat from './components/LeftPlaceholderFloat.vue'
+import RightPlaceholderFloat from './components/RightPlaceholderFloat.vue'
 import TaskOverviewFloat from './components/TaskOverviewFloat.vue'
 
 const route = useRoute()

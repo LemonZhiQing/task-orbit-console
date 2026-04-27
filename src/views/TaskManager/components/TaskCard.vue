@@ -20,9 +20,10 @@
       <div class="card-footer">
         <div class="metrics">
           <!-- 番茄钟进度 -->
-          <span v-if="task.planned_pomodoros > 0" class="metric-tag pomodoro" :class="{'is-done': task.actual_pomodoros >= task.planned_pomodoros}">
-            🍅 {{ task.actual_pomodoros || 0 }}/{{ task.planned_pomodoros }}
+          <span v-if="task.planned_pomodoros > 0" class="metric-tag pomodoro" :class="{'is-done': actualPomodoros >= task.planned_pomodoros}">
+            🍅 {{ actualPomodoros }}/{{ task.planned_pomodoros }}
           </span>
+          <span v-if="task.has_aggregated_metrics" class="metric-tag aggregate-badge" title="实际量来自子任务汇总">Σ {{ task.aggregated_children_count }}</span>
           <!-- 艾宾浩斯标记 -->
           <span v-if="task.is_review" class="metric-tag review-badge" title="完成后将进入复习池">🧠 知识</span>
         </div>
@@ -42,12 +43,15 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useTaskStore } from '@/stores/taskStore'
 import type { ITaskItem } from '@/types/task'
 
 const props = defineProps<{ task: ITaskItem }>()
 const emit = defineEmits(['promote'])
 const store = useTaskStore()
+
+const actualPomodoros = computed(() => props.task.effective_actual_pomodoros ?? props.task.actual_pomodoros ?? 0)
 
 const periodName = (p: string) => {
   const map: any = { daily: '今日', short_term: '短期', long_term: '长期', routine: '常驻' }
@@ -121,6 +125,7 @@ const toggleFocus = () => {
 .pomodoro { background: #FFF1F2; color: #E11D48; }
 .pomodoro.is-done { background: #ECFDF5; color: #059669; }
 .review-badge { background: #F0FDF4; color: #059669; }
+.aggregate-badge { background: #EEF2FF; color: #4F46E5; }
 
 .action-btn { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 6px; cursor: pointer; border: none; transition: all 0.2s; }
 .focus-btn { background: rgba(74,157,154,0.1); color: var(--color-primary, #4A9D9A); }

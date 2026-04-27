@@ -27,6 +27,10 @@
       </nav>
 
       <div class="action-section">
+        <div class="anniversary-chip" title="从 2024/04/28 开始计算">
+          <span class="anniversary-icon">💞</span>
+          <span class="anniversary-value">{{ anniversaryDays }} 天</span>
+        </div>
         <button class="theme-toggle-btn" @click="theme.toggleTheme()">
           <el-icon><component :is="theme.theme === 'dark' ? 'Sunny' : 'Moon'" /></el-icon>
         </button>
@@ -36,12 +40,25 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTheme } from '@/composables/useTheme'
 
 const theme = useTheme()
 const route = useRoute()
 const router = useRouter()
+
+const anniversaryStartDate = new Date('2024-04-28T00:00:00+08:00')
+const anniversaryDays = computed(() => {
+  const today = new Date()
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const start = new Date(
+    anniversaryStartDate.getFullYear(),
+    anniversaryStartDate.getMonth(),
+    anniversaryStartDate.getDate()
+  )
+  return Math.max(0, Math.floor((todayStart.getTime() - start.getTime()) / 86400000))
+})
 
 const tabs = [
   { id: 'today', routeName: 'TodayBoard', label: '今日无垠', icon: '☀️' },
@@ -56,7 +73,7 @@ const tabs = [
   padding: 24px 24px 0 24px;
   display: flex;
   justify-content: center;
-  z-index: 2000; 
+  z-index: 850;
   position: sticky;
   top: 0;
   background: transparent;
@@ -115,9 +132,42 @@ const tabs = [
 [data-theme='dark'] .active-slider { background: #334155; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
 @keyframes slide-in { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
 
-.action-section { display: flex; align-items: center; justify-content: flex-end; flex: 1; }
+.action-section { display: flex; align-items: center; justify-content: flex-end; flex: 1; gap: 14px; }
+.anniversary-chip {
+  min-width: 190px;
+  height: 46px;
+  padding: 0 16px 0 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(244, 63, 94, 0.16);
+  background:
+    radial-gradient(circle at 18% 20%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.62) 46%, rgba(255, 241, 242, 0.74)),
+    linear-gradient(135deg, rgba(244, 63, 94, 0.10), rgba(251, 113, 133, 0.05));
+  box-shadow: 0 10px 26px rgba(244, 63, 94, 0.10), inset 0 1px 1px rgba(255,255,255,0.75);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #9F1239;
+  user-select: none;
+  animation: anniversary-breathe 5.6s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+.anniversary-icon { font-size: 20px; filter: drop-shadow(0 4px 8px rgba(244, 63, 94, 0.18)); }
+.anniversary-value { font-size: 17px; font-weight: 900; letter-spacing: 0.02em; color: #E11D48; white-space: nowrap; }
+@keyframes anniversary-breathe {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    box-shadow: 0 10px 26px rgba(244, 63, 94, 0.10), inset 0 1px 1px rgba(255,255,255,0.75);
+    border-color: rgba(244, 63, 94, 0.16);
+  }
+  50% {
+    transform: translateY(-0.5px) scale(1.012);
+    box-shadow: 0 12px 30px rgba(244, 63, 94, 0.15), 0 0 16px rgba(251, 113, 133, 0.10), inset 0 1px 1px rgba(255,255,255,0.82);
+    border-color: rgba(244, 63, 94, 0.23);
+  }
+}
 .theme-toggle-btn { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.8); display: flex; justify-content: center; align-items: center; box-shadow: 0 2px 6px rgba(0,0,0,0.05); cursor: pointer; color: var(--vcp-text-sub, #64748B); transition: all 0.2s ease; outline: none; }
 .theme-toggle-btn:hover { transform: scale(1.08); background: #FFFFFF; color: var(--color-primary, #0EA5E9); box-shadow: 0 4px 10px rgba(0,0,0,0.08); }
+[data-theme='dark'] .anniversary-chip { background: linear-gradient(135deg, rgba(159, 18, 57, 0.28), rgba(30, 41, 59, 0.72)); border-color: rgba(251, 113, 133, 0.24); box-shadow: 0 10px 26px rgba(0,0,0,0.18); }
+[data-theme='dark'] .anniversary-value { color: #FDA4AF; }
 [data-theme='dark'] .theme-toggle-btn { background: rgba(15,23,42,0.6); border-color: rgba(255,255,255,0.1); color: #94A3B8; }
 [data-theme='dark'] .theme-toggle-btn:hover { background: rgba(30,41,59,0.8); color: #FBBF24; }
 </style>

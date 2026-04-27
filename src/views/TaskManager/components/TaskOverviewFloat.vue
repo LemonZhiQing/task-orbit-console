@@ -29,6 +29,7 @@
             <template #prefix>⌕</template>
           </el-input>
           <button class="reset-btn" @click="resetFilters">重置</button>
+          <button class="reset-btn" @click="hardRefreshFromServer">刷新服务器数据</button>
         </div>
 
         <div class="quick-filters">
@@ -48,7 +49,7 @@
           <div class="advanced-grid">
             <label class="field">
               <span>层级</span>
-              <el-select v-model="filters.period" size="small" class="field-control">
+              <el-select v-model="filters.period" size="small" class="field-control" popper-class="task-overview-popper">
                 <el-option label="全部层级" value="all" />
                 <el-option label="今日任务" value="daily" />
                 <el-option label="短期目标" value="short_term" />
@@ -59,7 +60,7 @@
 
             <label class="field">
               <span>看板状态</span>
-              <el-select v-model="filters.column" size="small" class="field-control">
+              <el-select v-model="filters.column" size="small" class="field-control" popper-class="task-overview-popper">
                 <el-option label="全部状态" value="all" />
                 <el-option label="待办" value="todo" />
                 <el-option label="进行中" value="in_progress" />
@@ -69,7 +70,7 @@
 
             <label class="field">
               <span>优先级</span>
-              <el-select v-model="filters.priority" size="small" class="field-control">
+              <el-select v-model="filters.priority" size="small" class="field-control" popper-class="task-overview-popper">
                 <el-option label="全部优先级" value="all" />
                 <el-option label="P0 紧急" value="p0" />
                 <el-option label="P1 高" value="p1" />
@@ -80,14 +81,14 @@
 
             <label class="field">
               <span>智能体</span>
-              <el-select v-model="filters.creator" clearable filterable size="small" class="field-control" placeholder="全部智能体">
+              <el-select v-model="filters.creator" clearable filterable size="small" class="field-control" placeholder="全部智能体" popper-class="task-overview-popper">
                 <el-option v-for="agent in creatorOptions" :key="agent" :label="agent" :value="agent" />
               </el-select>
             </label>
 
             <label class="field">
               <span>日期字段</span>
-              <el-select v-model="filters.dateField" size="small" class="field-control">
+              <el-select v-model="filters.dateField" size="small" class="field-control" popper-class="task-overview-popper">
                 <el-option label="计划日" value="plan_date" />
                 <el-option label="截止日" value="due_date" />
                 <el-option label="更新时间" value="updated_at" />
@@ -107,6 +108,7 @@
                 end-placeholder="结束"
                 value-format="x"
                 class="date-range"
+                popper-class="task-overview-popper"
               />
             </label>
 
@@ -117,7 +119,7 @@
 
             <label class="field">
               <span>排序</span>
-              <el-select v-model="filters.sortBy" size="small" class="field-control">
+              <el-select v-model="filters.sortBy" size="small" class="field-control" popper-class="task-overview-popper">
                 <el-option label="最近更新" value="updated_desc" />
                 <el-option label="创建时间" value="created_desc" />
                 <el-option label="截止日近→远" value="due_asc" />
@@ -338,6 +340,11 @@ const refreshFromServer = () => {
   store.hydrateFromServer(true).catch(() => {})
 }
 
+const hardRefreshFromServer = () => {
+  store.clearLocalCache()
+  store.hydrateFromServer(true).catch(() => {})
+}
+
 const resetFilters = () => {
   filters.keyword = ''
   filters.quickStatus = 'all'
@@ -376,15 +383,20 @@ const formatDate = (timestamp?: number | null) => {
 
 const progressPercent = (task: ITaskItem) => {
   if (task.kanban_col === 'done') return 100
-  if (task.planned_amount && task.planned_amount > 0) return Math.min(100, Math.round(((task.completed_amount || 0) / task.planned_amount) * 100))
-  if (task.planned_pomodoros && task.planned_pomodoros > 0) return Math.min(100, Math.round(((task.actual_pomodoros || 0) / task.planned_pomodoros) * 100))
+  const completedAmount = task.effective_completed_amount ?? task.completed_amount ?? 0
+  const actualPomodoros = task.effective_actual_pomodoros ?? task.actual_pomodoros ?? 0
+  if (task.planned_amount && task.planned_amount > 0) return Math.min(100, Math.round((completedAmount / task.planned_amount) * 100))
+  if (task.planned_pomodoros && task.planned_pomodoros > 0) return Math.min(100, Math.round((actualPomodoros / task.planned_pomodoros) * 100))
   if (task.kanban_col === 'in_progress') return 50
   return 0
 }
 
 const progressText = (task: ITaskItem) => {
-  if (task.planned_amount && task.planned_amount > 0) return `${task.completed_amount || 0}/${task.planned_amount}${task.unit || ''}`
-  if (task.planned_pomodoros && task.planned_pomodoros > 0) return `🍅 ${task.actual_pomodoros || 0}/${task.planned_pomodoros}`
+  const completedAmount = task.effective_completed_amount ?? task.completed_amount ?? 0
+  const actualPomodoros = task.effective_actual_pomodoros ?? task.actual_pomodoros ?? 0
+  const prefix = task.has_aggregated_metrics ? 'Σ ' : ''
+  if (task.planned_amount && task.planned_amount > 0) return `${prefix}${completedAmount}/${task.planned_amount}${task.unit || ''}`
+  if (task.planned_pomodoros && task.planned_pomodoros > 0) return `${prefix}🍅 ${actualPomodoros}/${task.planned_pomodoros}`
   return `${progressPercent(task)}%`
 }
 
@@ -394,8 +406,8 @@ const compactTags = (task: ITaskItem) => [...(task.tags || []), ...(task.knowled
 <style scoped>
 .task-overview-float {
   position: fixed;
-  top: 72px;
-  right: 36px;
+  top: 92px;
+  right: 24px;
   z-index: 1200;
   pointer-events: none;
 }
@@ -403,7 +415,8 @@ const compactTags = (task: ITaskItem) => [...(task.tags || []), ...(task.knowled
 .overview-trigger {
   pointer-events: auto;
   height: 44px;
-  min-width: 126px;
+  width: 160px;
+  box-sizing: border-box;
   border: 1px solid rgba(74, 157, 154, 0.2);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.78);
@@ -420,10 +433,16 @@ const compactTags = (task: ITaskItem) => [...(task.tags || []), ...(task.knowled
   transition: all 0.2s ease;
 }
 
-.overview-trigger:hover,
+.overview-trigger:hover {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(74, 157, 154, 0.36);
+  color: var(--color-primary, #4A9D9A);
+  box-shadow: 0 14px 30px rgba(74, 157, 154, 0.14);
+}
+
 .overview-trigger.active {
-  transform: translateY(-1px);
   background: rgba(74, 157, 154, 0.95);
+  border-color: rgba(74, 157, 154, 0.95);
   color: #fff;
   box-shadow: 0 18px 36px rgba(74, 157, 154, 0.22);
 }
@@ -441,8 +460,8 @@ const compactTags = (task: ITaskItem) => [...(task.tags || []), ...(task.knowled
   justify-content: center;
   font-size: 12px;
 }
-.overview-trigger.active .trigger-count,
-.overview-trigger:hover .trigger-count { background: rgba(255,255,255,0.24); }
+.overview-trigger:hover .trigger-count { background: rgba(74, 157, 154, 0.12); }
+.overview-trigger.active .trigger-count { background: rgba(255,255,255,0.24); }
 
 .overview-backdrop {
   position: fixed;
@@ -547,6 +566,10 @@ const compactTags = (task: ITaskItem) => [...(task.tags || []), ...(task.knowled
 .date-range { width: 100%; }
 :deep(.advanced-grid .el-input__wrapper),
 :deep(.advanced-grid .el-select__wrapper) { box-shadow: none !important; background: rgba(255,255,255,0.72) !important; border-radius: 10px; }
+
+:global(.task-overview-popper) {
+  z-index: 10050 !important;
+}
 
 .stats-strip {
   justify-content: flex-start;

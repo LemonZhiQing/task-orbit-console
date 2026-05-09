@@ -38,10 +38,15 @@
                       <span class="summary-pill context">上下文 {{ contextTaskCount }}</span>
                     </div>
 
-                    <button class="today-jump-btn" @click="jumpToToday">
-                      <span>⌖</span>
-                      跳到今天
-                    </button>
+                    <div class="timeline-nav-group">
+                      <button class="timeline-nav-btn" @click="shiftTimeline(-1)">{{ timelineNavLabels.prev }}</button>
+                      <button class="timeline-nav-current" @click="jumpToCurrentPeriod">
+                        <span>⌖</span>
+                        {{ timelineNavLabels.current }}
+                      </button>
+                      <button class="timeline-nav-btn" @click="shiftTimeline(1)">{{ timelineNavLabels.next }}</button>
+                      <span class="timeline-range-label">{{ timelineRangeLabel }}</span>
+                    </div>
 
                     <el-switch v-model="showCompletedTasks" size="small" active-text="显示已完成" class="completed-switch" />
                     <el-switch v-model="keepParentContext" size="small" active-text="保留父级上下文" class="completed-switch" />
@@ -52,11 +57,7 @@
                   <div class="toolbar-group">
                     <span class="toolbar-title">范围：</span>
                     <el-select v-model="radarRangeKey" size="small" style="width: 130px;" class="vcp-custom-select" popper-class="vcp-radar-popper">
-                      <el-option label="本周" value="this_week" />
-                      <el-option label="本月" value="this_month" />
-                      <el-option label="未来30天" value="next_30_days" />
-                      <el-option label="本季度" value="this_quarter" />
-                      <el-option label="全年" value="this_year" />
+                      <el-option label="当前视图" value="view_window" />
                       <el-option label="全部时间" value="all" />
                     </el-select>
                   </div>
@@ -108,6 +109,7 @@
                     :tasks="ganttTasks"
                     :zoomLevel="currentZoom"
                     :todaySignal="todayJumpSignal"
+                    :anchorDate="timelineAnchorDate"
                     @task-selected="openDetail"
                     @task-dblclick="openDetail"
                   />
@@ -134,23 +136,28 @@ import MiniTimelineWidget from './MiniTimelineWidget.vue'
 const store = useTaskStore()
 
 const isTimelineDialogOpen = ref(false)
-const currentZoom = ref('month')
+const currentZoom = ref('day')
 const todayJumpSignal = ref(0)
+const timelineAnchorDate = ref(Date.now())
 const isDrawerOpen = ref(false)
 const selectedTaskId = ref<string | null>(null)
 
 const filterPeriod = ref<'all' | TaskPeriod>('all')
 const filterStatus = ref<'all' | KanbanColumn | 'overdue'>('all')
 const filterPriority = ref<'all' | TaskPriority>('all')
-const radarRangeKey = ref('next_30_days')
+const radarRangeKey = ref('view_window')
 const radarSearch = ref('')
 const showCompletedTasks = ref(false)
 const keepParentContext = ref(true)
 
-const hasScheduleDate = (task: ITaskItem) => Boolean(task.plan_date || task.due_date)
+const hasScheduleDate = (task: ITaskItem) => Boolean(task.started_at || task.plan_date || task.due_date)
 const hasMeaningfulTitle = (task: ITaskItem) => Boolean(task.title?.trim()) && task.title.trim() !== '未命名任务'
 const isTaskDone = (task: ITaskItem) => task.kanban_col === 'done'
 const isTaskOverdue = (task: ITaskItem) => task.kanban_col !== 'done' && Boolean(task.due_date && task.due_date < Date.now())
+const POMODORO_MINUTES = 30
+
+const getPlannedPomodoros = (task: ITaskItem) => Math.max(0, Number(task.planned_pomodoros || 0))
+const getActualPomodoros = (task: ITaskItem) => Math.max(0, Number(task.effective_actual_pomodoros ?? task.actual_pomodoros ?? 0))
 
 const activeFilterSummary = computed(() => {
   const parts: string[] = []
@@ -164,40 +171,69 @@ const activeFilterSummary = computed(() => {
   return parts.length ? `已启用：${parts.join(' / ')}` : '未启用额外筛选'
 })
 
-const radarRange = computed(() => {
-  const now = new Date()
-  const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
-  const start = startOfDay(now)
+const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
+const formatDateShort = (date: Date) => `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`
+
+const getTimelineRange = (baseDate = new Date(timelineAnchorDate.value), zoom = currentZoom.value) => {
+  const start = startOfDay(baseDate)
   const end = new Date(start)
 
-  if (radarRangeKey.value === 'this_week') {
+  if (zoom === 'day') {
+    end.setDate(start.getDate() + 1)
+  } else if (zoom === 'week') {
     const day = start.getDay() || 7
     start.setDate(start.getDate() - day + 1)
+    end.setTime(start.getTime())
     end.setDate(start.getDate() + 7)
-  } else if (radarRangeKey.value === 'this_month') {
+  } else if (zoom === 'month') {
     start.setDate(1)
+    end.setTime(start.getTime())
     end.setMonth(start.getMonth() + 1, 1)
-  } else if (radarRangeKey.value === 'next_30_days') {
-    end.setDate(start.getDate() + 30)
-  } else if (radarRangeKey.value === 'this_quarter') {
+  } else if (zoom === 'quarter') {
     const quarterStartMonth = Math.floor(start.getMonth() / 3) * 3
     start.setMonth(quarterStartMonth, 1)
+    end.setTime(start.getTime())
     end.setMonth(quarterStartMonth + 3, 1)
-  } else if (radarRangeKey.value === 'this_year') {
+  } else if (zoom === 'year') {
     start.setMonth(0, 1)
+    end.setTime(start.getTime())
     end.setFullYear(start.getFullYear() + 1, 0, 1)
-  } else {
-    return null
   }
 
-  return { start: start.getTime(), end: end.getTime() }
+  return { start: start.getTime(), end: end.getTime(), startDate: start, endDate: end }
+}
+
+const timelineNavLabels = computed(() => {
+  const map: Record<string, { prev: string, current: string, next: string }> = {
+    day: { prev: '前一天', current: '今天', next: '后一天' },
+    week: { prev: '前一周', current: '本周', next: '后一周' },
+    month: { prev: '前一月', current: '本月', next: '后一月' },
+    quarter: { prev: '前一季', current: '本季', next: '后一季' },
+    year: { prev: '前一年', current: '今年', next: '后一年' }
+  }
+  return map[currentZoom.value] || map.day
+})
+
+const timelineRangeLabel = computed(() => {
+  const range = getTimelineRange()
+  if (currentZoom.value === 'day') return formatDateShort(range.startDate)
+  if (currentZoom.value === 'week') return `${formatDateShort(range.startDate)} - ${formatDateShort(new Date(range.end - 1))}`
+  if (currentZoom.value === 'month') return `${range.startDate.getFullYear()}/${String(range.startDate.getMonth() + 1).padStart(2, '0')}`
+  if (currentZoom.value === 'quarter') return `${range.startDate.getFullYear()} Q${Math.floor(range.startDate.getMonth() / 3) + 1}`
+  return `${range.startDate.getFullYear()}`
+})
+
+const radarRange = computed(() => {
+  if (radarRangeKey.value === 'all') return null
+  const range = getTimelineRange()
+  return { start: range.start, end: range.end }
 })
 
 const intersectsRadarRange = (task: ITaskItem) => {
   const range = radarRange.value
   if (!range) return true
-  const taskStart = task.plan_date || task.due_date
-  const taskEnd = task.due_date || task.plan_date
+  const taskStart = task.started_at || task.plan_date || task.due_date
+  const taskEnd = task.due_date || task.started_at || task.plan_date
   if (!taskStart || !taskEnd) return false
   return taskStart < range.end && taskEnd >= range.start
 }
@@ -267,13 +303,16 @@ const contextTaskCount = computed(() => Math.max(0, scheduledTasks.value.length 
 const unscheduledTasks = computed(() => store.normalizedTaskList.filter(t => !hasScheduleDate(t) || !hasMeaningfulTitle(t)))
 
 const buildTaskDateRange = (task: ITaskItem) => {
-  const startBase = task.plan_date || task.due_date
+  const startBase = task.started_at || task.plan_date || task.due_date
   if (!startBase) return null
 
   const startDate = new Date(startBase)
+  const plannedPomodoros = getPlannedPomodoros(task)
   let endDate = new Date(task.due_date || task.plan_date || startBase)
 
-  if (endDate.getTime() <= startDate.getTime()) {
+  if (plannedPomodoros > 0) {
+    endDate = new Date(startDate.getTime() + plannedPomodoros * POMODORO_MINUTES * 60 * 1000)
+  } else if (endDate.getTime() <= startDate.getTime()) {
     const padding = task.period === 'daily' ? 2 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000
     endDate = new Date(startDate.getTime() + padding)
   }
@@ -282,13 +321,18 @@ const buildTaskDateRange = (task: ITaskItem) => {
 }
 
 const taskProgress = (task: ITaskItem) => {
+  const actualPomodoros = getActualPomodoros(task)
+  const plannedPomodoros = getPlannedPomodoros(task)
+  if (plannedPomodoros > 0) return Math.min(1, actualPomodoros / plannedPomodoros)
   if (task.kanban_col === 'done') return 1
-  const completedAmount = task.effective_completed_amount ?? task.completed_amount ?? 0
-  const actualPomodoros = task.effective_actual_pomodoros ?? task.actual_pomodoros ?? 0
-  if (task.planned_amount && task.planned_amount > 0) return Math.min(1, completedAmount / task.planned_amount)
-  if (task.planned_pomodoros && task.planned_pomodoros > 0) return Math.min(1, actualPomodoros / task.planned_pomodoros)
   if (task.kanban_col === 'in_progress') return 0.5
   return 0
+}
+
+const taskDisplayProgress = (task: ITaskItem) => {
+  const completedAmount = task.effective_completed_amount ?? task.completed_amount ?? 0
+  if (task.planned_amount && task.planned_amount > 0) return Math.min(1, completedAmount / task.planned_amount)
+  return taskProgress(task)
 }
 
 const taskThemeColor = (task: ITaskItem) => {
@@ -320,11 +364,14 @@ const ganttTasks = computed(() => {
       end_date: range.endDate,
       parent: parentId,
       progress: taskProgress(t),
+      displayProgress: taskDisplayProgress(t),
       type: t.period === 'long_term' ? 'project' : 'task',
-      color: isContext ? 'rgba(62, 58, 54, 0.04)' : isTaskOverdue(t) ? 'rgba(244, 63, 94, 0.12)' : 'rgba(62, 58, 54, 0.08)',
-      progressColor: isContext ? 'rgba(140, 132, 122, 0.35)' : isTaskOverdue(t) ? '#F43F5E' : themeColor,
+      color: isContext ? 'rgba(62, 58, 54, 0.04)' : 'rgba(62, 58, 54, 0.08)',
+      progressColor: isContext ? 'rgba(140, 132, 122, 0.35)' : themeColor,
       themeColor,
       overdue: isTaskOverdue(t),
+      completed: isTaskDone(t),
+      status: t.kanban_col,
       context: isContext,
       open: true
     }
@@ -333,14 +380,26 @@ const ganttTasks = computed(() => {
   return { data, links: [] }
 })
 
-const jumpToToday = () => {
+const shiftTimeline = (direction: -1 | 1) => {
+  const next = new Date(timelineAnchorDate.value)
+  if (currentZoom.value === 'day') next.setDate(next.getDate() + direction)
+  else if (currentZoom.value === 'week') next.setDate(next.getDate() + direction * 7)
+  else if (currentZoom.value === 'month') next.setMonth(next.getMonth() + direction)
+  else if (currentZoom.value === 'quarter') next.setMonth(next.getMonth() + direction * 3)
+  else if (currentZoom.value === 'year') next.setFullYear(next.getFullYear() + direction)
+  timelineAnchorDate.value = next.getTime()
+}
+
+const jumpToCurrentPeriod = () => {
+  timelineAnchorDate.value = Date.now()
   todayJumpSignal.value += 1
 }
+
+const jumpToToday = () => jumpToCurrentPeriod()
 
 const openDetail = (taskId: string) => {
   selectedTaskId.value = taskId
   isDrawerOpen.value = true
-  isTimelineDialogOpen.value = false
 }
 </script>
 
@@ -486,7 +545,15 @@ const openDetail = (taskId: string) => {
   background: rgba(107, 114, 128, 0.1);
 }
 
-.today-jump-btn {
+.timeline-nav-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.timeline-nav-btn,
+.timeline-nav-current {
   height: 30px;
   border: 1px solid rgba(74, 157, 154, 0.18);
   border-radius: 9px;
@@ -502,10 +569,27 @@ const openDetail = (taskId: string) => {
   transition: all 0.2s ease;
 }
 
-.today-jump-btn:hover {
+.timeline-nav-current {
+  background: rgba(74, 157, 154, 0.14);
+}
+
+.timeline-nav-btn:hover,
+.timeline-nav-current:hover {
   background: var(--color-primary, #4A9D9A);
   color: #fff;
   transform: translateY(-1px);
+}
+
+.timeline-range-label {
+  min-width: 94px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(62, 58, 54, 0.05);
+  color: var(--vcp-text-sub, #8C847A);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .right-filters {

@@ -336,12 +336,13 @@ const openDetail = (taskId: string) => {
   })
 }
 
-const refreshFromServer = () => {
+const refreshFromServer = async () => {
+  await store.syncToServerNow().catch(() => {})
   store.hydrateFromServer(true).catch(() => {})
 }
 
-const hardRefreshFromServer = () => {
-  store.clearLocalCache()
+const hardRefreshFromServer = async () => {
+  await store.syncToServerNow().catch(() => {})
   store.hydrateFromServer(true).catch(() => {})
 }
 

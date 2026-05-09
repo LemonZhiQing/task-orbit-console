@@ -46,6 +46,7 @@ export interface ITaskItem {
   // === 3. 调度与效能 ===
   plan_date?: number | null;
   due_date?: number | null;
+  started_at?: number | null;
   completed_at?: number | null;
   deleted_at?: number | null;
   sort_order?: number;

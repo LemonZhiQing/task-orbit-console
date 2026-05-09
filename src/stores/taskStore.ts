@@ -15,6 +15,7 @@ const STORAGE_KEYS = {
 const ORDERED_COLUMNS: KanbanColumn[] = ['todo', 'in_progress', 'done']
 const ORDERED_PERIODS: TaskPeriod[] = ['daily', 'short_term', 'long_term', 'routine']
 const ORDERED_PRIORITIES: TaskPriority[] = ['p0', 'p1', 'p2', 'p3']
+const TASK_THEME_COLORS = ['#4A9D9A', '#3E3A36', '#516B91', '#81C784', '#F43F5E', '#F59E0B', '#8B5CF6', '#10B981', '#3B82F6'] as const
 const REVIEW_INTERVALS = [1, 2, 4, 7, 15, 30, 90, 180, 365, 1095]
 const LONG_TERM_REVIEW_INTERVAL = 1095
 
@@ -41,6 +42,11 @@ function normalizeStringArray(value: unknown): string[] {
   return []
 }
 
+function normalizeTaskTitle(value: unknown): string {
+  const title = typeof value === 'string' ? value.trim() : ''
+  return title || '未命名任务'
+}
+
 function parseMeta(task: Partial<ITaskItem> & Record<string, any>) {
   if (!task.ai_meta_json) return null
   try { return JSON.parse(task.ai_meta_json) } catch { return null }
@@ -57,7 +63,7 @@ function normalizeTask(rawTask: Partial<ITaskItem> & Record<string, any>): ITask
 
   return {
     id: String(rawTask.id || crypto.randomUUID()),
-    title: String(rawTask.title ?? '未命名任务'),
+    title: normalizeTaskTitle(rawTask.title),
     period: ORDERED_PERIODS.includes(rawTask.period as TaskPeriod) ? rawTask.period as TaskPeriod : 'daily',
     kanban_col: ORDERED_COLUMNS.includes(rawTask.kanban_col as KanbanColumn) ? rawTask.kanban_col as KanbanColumn : 'todo',
     priority: ORDERED_PRIORITIES.includes(rawTask.priority as TaskPriority) ? rawTask.priority as TaskPriority : 'p2',
@@ -67,6 +73,7 @@ function normalizeTask(rawTask: Partial<ITaskItem> & Record<string, any>): ITask
     version: Number(rawTask.version) || 1,
     plan_date: nullableTimestamp(rawTask.plan_date),
     due_date: nullableTimestamp(rawTask.due_date),
+    started_at: nullableTimestamp(rawTask.started_at),
     completed_at: completedAt,
     deleted_at: nullableTimestamp(rawTask.deleted_at),
     sort_order: Number.isFinite(Number(rawTask.sort_order)) ? Number(rawTask.sort_order) : updatedAt,
@@ -112,6 +119,16 @@ function isDueReviewTask(task: ITaskItem) {
   if (!task.is_review || !task.review_info || task.review_info.completed) return false
   if (!task.review_info.next_review_date) return true
   return task.review_info.next_review_date <= dateKey()
+}
+
+function randomTaskColor() {
+  return TASK_THEME_COLORS[Math.floor(Math.random() * TASK_THEME_COLORS.length)]
+}
+
+function startOfTodayTimestamp(now = Date.now()) {
+  const date = new Date(now)
+  date.setHours(0, 0, 0, 0)
+  return date.getTime()
 }
 
 export const useTaskStore = defineStore('taskStore', () => {
@@ -229,17 +246,20 @@ export const useTaskStore = defineStore('taskStore', () => {
     }
   }, 600)
 
-  const syncToServer = useDebounceFn(async () => {
+  async function syncToServerNow() {
     isSyncing.value = true
     try {
       await taskApi.batchUpdateTasks(normalizedTaskList.value)
     } catch (error) {
       console.error('[TaskOrbit] batch sync failed:', error)
       ElMessage.error('批量同步失败，已保留本地数据')
+      throw error
     } finally {
       isSyncing.value = false
     }
-  }, 1000)
+  }
+
+  const syncToServer = useDebounceFn(syncToServerNow, 1000)
 
   async function hydrateFromServer(force = false) {
     if (isHydrated.value && !force) return
@@ -269,6 +289,7 @@ export const useTaskStore = defineStore('taskStore', () => {
     const newTask = normalizeTask({
       ...payload,
       id: payload.id || crypto.randomUUID(),
+      color: payload.color || randomTaskColor(),
       kanban_col: payload.kanban_col || 'todo',
       period: payload.period || 'daily',
       priority: payload.priority || 'p2',
@@ -301,12 +322,40 @@ export const useTaskStore = defineStore('taskStore', () => {
           : isCompleted
             ? (task.completed_at || now)
             : null
+        const enteringInProgress = task.kanban_col !== 'in_progress' && nextCol === 'in_progress'
+        const todayTimestamp = startOfTodayTimestamp(now)
+        const nextStartedAt = Object.prototype.hasOwnProperty.call(updates, 'started_at')
+          ? updates.started_at
+          : enteringInProgress
+            ? now
+            : task.started_at
+        const nextPlanDate = Object.prototype.hasOwnProperty.call(updates, 'plan_date')
+          ? updates.plan_date
+          : enteringInProgress
+            ? todayTimestamp
+            : task.plan_date
+        const nextDueDate = Object.prototype.hasOwnProperty.call(updates, 'due_date')
+          ? updates.due_date
+          : enteringInProgress
+            ? todayTimestamp
+            : task.due_date
         changedTask = normalizeTask({
           ...task,
           ...updates,
+          plan_date: nextPlanDate,
+          due_date: nextDueDate,
+          started_at: nextStartedAt,
           completed_at: nextCompletedAt,
-          actual_pomodoros: isCompleted ? (nextPlannedPomodoros || 1) : 0,
-          completed_amount: isCompleted ? (nextPlannedAmount || 1) : 0,
+          actual_pomodoros: Object.prototype.hasOwnProperty.call(updates, 'actual_pomodoros')
+            ? updates.actual_pomodoros
+            : isCompleted
+              ? (task.actual_pomodoros || nextPlannedPomodoros || 1)
+              : task.actual_pomodoros,
+          completed_amount: Object.prototype.hasOwnProperty.call(updates, 'completed_amount')
+            ? updates.completed_amount
+            : isCompleted
+              ? (task.completed_amount || nextPlannedAmount || 1)
+              : task.completed_amount,
           updated_at: now,
           version: (task.version || 1) + 1
         })
@@ -334,9 +383,28 @@ export const useTaskStore = defineStore('taskStore', () => {
 
   function setColumnTasks(column: KanbanColumn, nextTasks: ITaskItem[]) {
     const now = Date.now()
-    const normalizedColumnTasks = nextTasks.map((task, index) =>
-      normalizeTask({ ...task, kanban_col: column, period: 'daily', sort_order: now + index, updated_at: now })
-    )
+    const previousTaskMap = new Map(normalizedTaskList.value.map(task => [task.id, task]))
+    const normalizedColumnTasks = nextTasks.map((task, index) => {
+      const previousTask = previousTaskMap.get(task.id)
+      const enteringInProgress = previousTask?.kanban_col !== 'in_progress' && column === 'in_progress'
+      const todayTimestamp = startOfTodayTimestamp(now)
+      const startedAt = task.started_at || (
+        enteringInProgress
+          ? now
+          : previousTask?.started_at
+      )
+
+      return normalizeTask({
+        ...task,
+        kanban_col: column,
+        period: 'daily',
+        plan_date: enteringInProgress ? todayTimestamp : task.plan_date,
+        due_date: enteringInProgress ? todayTimestamp : task.due_date,
+        started_at: startedAt,
+        sort_order: now + index,
+        updated_at: now
+      })
+    })
     const changedIds = new Set(normalizedColumnTasks.map(task => task.id))
     const remainingTasks = normalizedTaskList.value.filter(task => !changedIds.has(task.id))
     replaceTaskList([...remainingTasks, ...normalizedColumnTasks])
@@ -406,6 +474,6 @@ export const useTaskStore = defineStore('taskStore', () => {
   return {
     taskList, inboxList, isHydrated, isSyncing, currentView,
     normalizedTaskList, deletedTasks, todayTasks, shortTermTasks, longTermTasks, routineTasks, reviewTasks, todayReviewTasks, focusedTask, tasksByColumn, tasksByPeriod, insights,
-    hydrateFromServer, clearLocalCache, createBackup, createTask, updateTask, removeTask, restoreTask, moveTaskColumn, setColumnTasks, setFocusedTask, moveTaskToPeriod, addInboxItem, removeInboxItem, promoteInboxToTask, markReviewTask, syncToServer
+    hydrateFromServer, clearLocalCache, createBackup, createTask, updateTask, removeTask, restoreTask, moveTaskColumn, setColumnTasks, setFocusedTask, moveTaskToPeriod, addInboxItem, removeInboxItem, promoteInboxToTask, markReviewTask, syncToServer, syncToServerNow
   }
 })

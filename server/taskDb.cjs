@@ -11,6 +11,12 @@ const VALID_PERIODS = new Set(['daily', 'short_term', 'long_term', 'routine']);
 const VALID_COLUMNS = new Set(['todo', 'in_progress', 'done']);
 const VALID_PRIORITIES = new Set(['p0', 'p1', 'p2', 'p3']);
 
+function startOfTodayTimestamp(now = Date.now()) {
+    const date = new Date(now);
+    date.setHours(0, 0, 0, 0);
+    return date.getTime();
+}
+
 if (!fs.existsSync(taskDataDir)) {
     fs.mkdirSync(taskDataDir, { recursive: true });
 }
@@ -36,6 +42,7 @@ function initDb() {
       parent_id TEXT,
       plan_date INTEGER,
       due_date INTEGER,
+      started_at INTEGER,
       completed_at INTEGER,
       deleted_at INTEGER,
       sort_order INTEGER DEFAULT 0,
@@ -71,6 +78,7 @@ function initDb() {
         ['parent_id', 'ALTER TABLE tasks ADD COLUMN parent_id TEXT'],
         ['plan_date', 'ALTER TABLE tasks ADD COLUMN plan_date INTEGER'],
         ['due_date', 'ALTER TABLE tasks ADD COLUMN due_date INTEGER'],
+        ['started_at', 'ALTER TABLE tasks ADD COLUMN started_at INTEGER'],
         ['completed_at', 'ALTER TABLE tasks ADD COLUMN completed_at INTEGER'],
         ['deleted_at', 'ALTER TABLE tasks ADD COLUMN deleted_at INTEGER'],
         ['sort_order', 'ALTER TABLE tasks ADD COLUMN sort_order INTEGER DEFAULT 0'],
@@ -183,6 +191,7 @@ function normalizeTask(task = {}) {
         parent_id: rawParentId ? String(rawParentId) : null,
         plan_date: toTimestamp(task.plan_date, null),
         due_date: toTimestamp(task.due_date, null),
+        started_at: toTimestamp(task.started_at, null),
         completed_at: completedAt,
         deleted_at: toTimestamp(task.deleted_at, null),
         sort_order: Number.isFinite(Number(task.sort_order)) ? Number(task.sort_order) : updatedAt,
@@ -253,6 +262,7 @@ function deserializeTask(row) {
         parent_id: row.parent_id,
         plan_date: row.plan_date,
         due_date: row.due_date,
+        started_at: row.started_at,
         completed_at: row.completed_at,
         deleted_at: row.deleted_at,
         sort_order: row.sort_order,
@@ -282,16 +292,16 @@ const statements = {
     insertTask: db.prepare(`
     INSERT INTO tasks (
       id, title, period, kanban_col, priority, is_focused, memo, is_review,
-      project, parent_id, plan_date, due_date, completed_at, deleted_at, sort_order, version,
+      project, parent_id, plan_date, due_date, started_at, completed_at, deleted_at, sort_order, version,
       planned_pomodoros, actual_pomodoros, planned_amount, completed_amount, unit,
       tags_json, creator_agent, review_meta_json, review_history_json, knowledge_refs_json,
       ai_meta_json, color, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `),
     updateTask: db.prepare(`
     UPDATE tasks SET
       title = ?, period = ?, kanban_col = ?, priority = ?, is_focused = ?, memo = ?, is_review = ?,
-      project = ?, parent_id = ?, plan_date = ?, due_date = ?, completed_at = ?, deleted_at = ?, sort_order = ?, version = ?,
+      project = ?, parent_id = ?, plan_date = ?, due_date = ?, started_at = ?, completed_at = ?, deleted_at = ?, sort_order = ?, version = ?,
       planned_pomodoros = ?, actual_pomodoros = ?, planned_amount = ?, completed_amount = ?, unit = ?,
       tags_json = ?, creator_agent = ?, review_meta_json = ?, review_history_json = ?, knowledge_refs_json = ?,
       ai_meta_json = ?, color = ?, created_at = ?, updated_at = ?
@@ -321,6 +331,7 @@ function runInsert(serialized) {
         serialized.parent_id,
         serialized.plan_date,
         serialized.due_date,
+        serialized.started_at,
         serialized.completed_at,
         serialized.deleted_at,
         serialized.sort_order,
@@ -355,6 +366,7 @@ function runUpdate(serialized, id) {
         serialized.parent_id,
         serialized.plan_date,
         serialized.due_date,
+        serialized.started_at,
         serialized.completed_at,
         serialized.deleted_at,
         serialized.sort_order,
@@ -426,10 +438,30 @@ async function updateTask(id, updates) {
 
     const now = Date.now();
     const nextColumn = updates.kanban_col || existingTask.kanban_col;
+    const enteringInProgress = existingTask.kanban_col !== 'in_progress' && nextColumn === 'in_progress';
+    const todayTimestamp = startOfTodayTimestamp(now);
+    const nextStartedAt = Object.prototype.hasOwnProperty.call(updates, 'started_at')
+        ? updates.started_at
+        : enteringInProgress
+            ? now
+            : existingTask.started_at;
+    const nextPlanDate = Object.prototype.hasOwnProperty.call(updates, 'plan_date')
+        ? updates.plan_date
+        : enteringInProgress
+            ? todayTimestamp
+            : existingTask.plan_date;
+    const nextDueDate = Object.prototype.hasOwnProperty.call(updates, 'due_date')
+        ? updates.due_date
+        : enteringInProgress
+            ? todayTimestamp
+            : existingTask.due_date;
     const mergedTask = normalizeTask({
         ...existingTask,
         ...updates,
         id,
+        plan_date: nextPlanDate,
+        due_date: nextDueDate,
+        started_at: nextStartedAt,
         completed_at: Object.prototype.hasOwnProperty.call(updates, 'completed_at')
             ? updates.completed_at
             : nextColumn === 'done'

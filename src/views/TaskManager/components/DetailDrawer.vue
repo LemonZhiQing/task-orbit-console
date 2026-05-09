@@ -18,7 +18,7 @@
         </div>
 
         <!-- 无感标题输入 -->
-        <input v-model="task.title" class="title-input" placeholder="输入任务标题..." @blur="saveTask" />
+        <input v-model="task.title" class="title-input" placeholder="输入任务标题..." @focus="handleTitleFocus" @blur="saveTask" />
 
         <!-- 核心属性网格 -->
         <div class="attr-grid">
@@ -121,14 +121,39 @@
             />
           </div>
 
+          <!-- 开始时间 -->
+          <div class="attr-row" style="grid-column: span 2;">
+            <span class="attr-icon">▶️</span><span class="attr-label">开始</span>
+            <el-date-picker
+              v-model="localStartedAt"
+              type="datetime"
+              placeholder="未开始"
+              format="YYYY/MM/DD HH:mm"
+              value-format="x"
+              class="borderless-date-picker"
+              popper-class="vcp-drawer-popper"
+              :clearable="true"
+              @change="saveTask"
+            />
+          </div>
+
           <!-- 番茄钟 -->
           <div class="attr-row">
             <span class="attr-icon">🍅</span><span class="attr-label">番茄钟</span>
             <div class="flex-inputs">
               <span
+                v-if="isAggregatedMetricTask"
                 class="readonly-metric"
-                :title="task.has_aggregated_metrics ? '实际番茄钟来自子任务汇总' : '实际番茄钟由系统统计，不能手动编辑'"
-              >{{ task.has_aggregated_metrics ? 'Σ ' : '' }}{{ displayActualPomodoros }}</span>
+                title="实际番茄钟来自子任务汇总"
+              >Σ {{ displayActualPomodoros }}</span>
+              <input
+                v-else
+                type="number"
+                v-model.number="task.actual_pomodoros"
+                class="attr-value micro-input"
+                @blur="saveTask"
+                placeholder="实际"
+              />
               <span class="slash">/</span>
               <input type="number" v-model.number="task.planned_pomodoros" class="attr-value micro-input" @blur="saveTask" placeholder="计划" />
             </div>
@@ -139,9 +164,18 @@
             <span class="attr-icon">📈</span><span class="attr-label">任务量</span>
             <div class="flex-inputs">
               <span
+                v-if="isAggregatedMetricTask"
                 class="readonly-metric"
-                :title="task.has_aggregated_metrics ? '实际完成量来自子任务汇总' : '实际完成量由系统统计，不能手动编辑'"
-              >{{ task.has_aggregated_metrics ? 'Σ ' : '' }}{{ displayCompletedAmount }}</span>
+                title="实际完成量来自子任务汇总"
+              >Σ {{ displayCompletedAmount }}</span>
+              <input
+                v-else
+                type="number"
+                v-model.number="task.completed_amount"
+                class="attr-value micro-input"
+                @blur="saveTask"
+                placeholder="完成"
+              />
               <span class="slash">/</span>
               <input type="number" v-model.number="task.planned_amount" class="attr-value micro-input" @blur="saveTask" placeholder="总量" />
               <input type="text" v-model="task.unit" class="attr-value micro-input" style="width:60px; margin-left:4px" placeholder="单位" @blur="saveTask" />
@@ -256,13 +290,15 @@ const store = useTaskStore()
 const task = ref<ITaskItem | null>(null)
 const localPlanDate = ref<number | null>(null)
 const localDueDate = ref<number | null>(null)
+const localStartedAt = ref<number | null>(null)
 const formStrings = ref({ knowledge_tags: '', external_urls: '', tags: '' })
 const parentCandidates = ref<ParentCandidate[]>([])
 const navigationStack = ref<{ id: string, title: string }[]>([])
 
-const displayActualPomodoros = computed(() => task.value?.effective_actual_pomodoros ?? task.value?.actual_pomodoros ?? 0)
-const displayCompletedAmount = computed(() => task.value?.effective_completed_amount ?? task.value?.completed_amount ?? 0)
-const showChildTasks = computed(() => task.value?.period === 'short_term' || task.value?.period === 'long_term')
+const isAggregatedMetricTask = computed(() => task.value?.period === 'short_term' || task.value?.period === 'long_term')
+const displayActualPomodoros = computed(() => isAggregatedMetricTask.value ? (task.value?.effective_actual_pomodoros ?? 0) : (task.value?.actual_pomodoros ?? 0))
+const displayCompletedAmount = computed(() => isAggregatedMetricTask.value ? (task.value?.effective_completed_amount ?? 0) : (task.value?.completed_amount ?? 0))
+const showChildTasks = computed(() => isAggregatedMetricTask.value)
 const childTasks = computed(() => {
   if (!task.value) return []
   return store.normalizedTaskList
@@ -296,6 +332,7 @@ const loadTask = (taskId: string) => {
   task.value = JSON.parse(JSON.stringify(found))
   localPlanDate.value = task.value.plan_date || null
   localDueDate.value = task.value.due_date || null
+  localStartedAt.value = task.value.started_at || null
   formStrings.value.knowledge_tags = (task.value.knowledge_tags || []).join(', ')
   formStrings.value.external_urls = (task.value.external_urls || []).join(', ')
   formStrings.value.tags = (task.value.tags || []).join(', ')
@@ -314,6 +351,42 @@ watch(() => [props.visible, props.taskId] as const, ([newVal, taskId]) => {
     loadTask(taskId)
   }
 }, { immediate: true })
+
+// 抽屉打开期间，如果看板拖拽等外部操作更新了同一个任务，同步关键系统字段。
+// 这里不整体重载表单，避免覆盖用户正在编辑但尚未 blur 保存的标题、备注等内容。
+watch(() => {
+  if (!props.visible || !props.taskId) return null
+  const found = store.normalizedTaskList.find(item => item.id === props.taskId)
+  if (!found) return null
+  return [found.kanban_col, found.period, found.plan_date, found.due_date, found.started_at, found.completed_at, found.updated_at, found.sort_order].join('|')
+}, () => {
+  if (!props.visible || !props.taskId || !task.value || task.value.id !== props.taskId) return
+  const found = store.normalizedTaskList.find(item => item.id === props.taskId)
+  if (!found) return
+
+  const periodChanged = task.value.period !== found.period
+  task.value.kanban_col = found.kanban_col
+  task.value.period = found.period
+  task.value.plan_date = found.plan_date
+  task.value.due_date = found.due_date
+  localPlanDate.value = found.plan_date || null
+  localDueDate.value = found.due_date || null
+  task.value.started_at = found.started_at
+  localStartedAt.value = found.started_at || null
+  task.value.completed_at = found.completed_at
+  task.value.updated_at = found.updated_at
+  task.value.sort_order = found.sort_order
+
+  if (periodChanged) {
+    fetchParentCandidates(found.period)
+  }
+}, { flush: 'post' })
+
+const handleTitleFocus = () => {
+  if (task.value?.title === '未命名任务') {
+    task.value.title = ''
+  }
+}
 
 // 专属拦截器：当用户在下拉框里切换“周期”时，先清理旧项目，再拉取新项目，最后保存
 const handlePeriodChange = () => {
@@ -383,6 +456,7 @@ const saveTask = () => {
   if (!task.value) return
   task.value.plan_date = localPlanDate.value ? Number(localPlanDate.value) : null
   task.value.due_date = localDueDate.value ? Number(localDueDate.value) : null
+  task.value.started_at = localStartedAt.value ? Number(localStartedAt.value) : null
   task.value.parent_id = task.value.project || task.value.parent_id || null
   task.value.project = task.value.parent_id
   task.value.knowledge_tags = formStrings.value.knowledge_tags.split(',').map(s => s.trim()).filter(Boolean)

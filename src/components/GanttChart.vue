@@ -19,6 +19,10 @@ const props = defineProps({
   todaySignal: {
     type: Number,
     default: 0
+  },
+  anchorDate: {
+    type: Number,
+    default: () => Date.now()
   }
 })
 
@@ -47,13 +51,14 @@ onMounted(() => {
   ];
 
   // 2. 内部文本与外部挂件 (进度居中与标题右置)
-  gantt.templates.task_text = function(start, end, task){ 
-    const pct = Math.round(task.progress * 100);
+  gantt.templates.task_text = function(start, end, task){
+    const displayProgress = Number.isFinite(Number(task.displayProgress)) ? Number(task.displayProgress) : Number(task.progress || 0);
+    const pct = Math.round(displayProgress * 100);
     // 如果有进度，用白色带阴影；如果是 0%，用暗灰融入空槽背景
     if (pct > 0) {
        return `<span style="font-size: 11px; font-weight: 800; color: #FFF; text-shadow: 0 1px 3px rgba(0,0,0,0.6); z-index: 3;">${pct}%</span>`;
     }
-    return `<span style="font-size: 11px; font-weight: 800; color: rgba(62, 58, 54, 0.4);">${pct}%</span>`; 
+    return `<span style="font-size: 11px; font-weight: 800; color: rgba(62, 58, 54, 0.4);">${pct}%</span>`;
   };
   
   gantt.templates.rightside_text = function(start, end, task){
@@ -69,7 +74,13 @@ onMounted(() => {
     if (task.color) {
       task.color = task.color;
     }
-    return [task.overdue ? "vcp-overdue-task" : "", task.context ? "vcp-context-task" : ""].filter(Boolean).join(" ");
+    return [
+      task.overdue && !task.completed ? "vcp-overdue-task" : "",
+      task.status === "todo" ? "vcp-todo-task" : "",
+      task.status === "in_progress" ? "vcp-active-task" : "",
+      task.completed ? "vcp-completed-task" : "",
+      task.context ? "vcp-context-task" : ""
+    ].filter(Boolean).join(" ");
   };
 
   // 3. 缩放配置
@@ -106,9 +117,9 @@ onMounted(() => {
 })
 
 const getPreciseScaleRange = () => {
-  const now = new Date();
-  const start = new Date(now);
-  const end = new Date(now);
+  const anchor = new Date(props.anchorDate || Date.now());
+  const start = new Date(anchor);
+  const end = new Date(anchor);
 
   if (props.zoomLevel === 'day') {
     start.setHours(0, 0, 0, 0);
@@ -178,7 +189,7 @@ const ensureTodayMarker = () => {
 const showToday = () => {
   if (!ganttContainer.value) return;
   ensureTodayMarker();
-  gantt.showDate(new Date());
+  gantt.showDate(new Date(props.anchorDate || Date.now()));
 }
 
 watch(() => props.tasks, (newTasks) => {
@@ -190,6 +201,10 @@ watch(() => props.zoomLevel, (newZoom) => {
     gantt.ext.zoom.setLevel(newZoom);
     updateGanttDataAndScale(props.tasks);
   }
+})
+
+watch(() => props.anchorDate, () => {
+  updateGanttDataAndScale(props.tasks);
 })
 
 watch(() => props.todaySignal, () => {
@@ -264,10 +279,50 @@ onUnmounted(() => {
 .vcp-minimal-gantt .gantt_project .gantt_task_progress {
   border-radius: 8px !important;
 }
+.vcp-minimal-gantt .vcp-todo-task .gantt_task_line,
+.vcp-minimal-gantt .gantt_task_line.vcp-todo-task {
+  border-color: rgba(244, 63, 94, 0.72) !important;
+  background: rgba(244, 63, 94, 0.05) !important;
+  box-shadow: inset 0 2px 4px rgba(244, 63, 94, 0.04), 0 0 0 1px rgba(244, 63, 94, 0.12), 0 0 14px rgba(244, 63, 94, 0.18) !important;
+}
+.vcp-minimal-gantt .vcp-todo-task .gantt_task_progress,
+.vcp-minimal-gantt .gantt_task_line.vcp-todo-task .gantt_task_progress {
+  opacity: 0.68 !important;
+}
+.vcp-minimal-gantt .vcp-active-task .gantt_task_line,
+.vcp-minimal-gantt .gantt_task_line.vcp-active-task {
+  border-color: rgba(59, 130, 246, 0.86) !important;
+  background: rgba(59, 130, 246, 0.06) !important;
+  box-shadow: inset 0 2px 4px rgba(59, 130, 246, 0.06), 0 0 0 1px rgba(59, 130, 246, 0.18), 0 0 18px rgba(59, 130, 246, 0.28) !important;
+}
+.vcp-minimal-gantt .vcp-active-task .gantt_task_progress,
+.vcp-minimal-gantt .gantt_task_line.vcp-active-task .gantt_task_progress {
+  opacity: 1 !important;
+  box-shadow: 2px 0 8px rgba(59, 130, 246, 0.22) !important;
+}
 .vcp-minimal-gantt .vcp-overdue-task .gantt_task_line,
 .vcp-minimal-gantt .gantt_task_line.vcp-overdue-task {
-  border-color: rgba(244, 63, 94, 0.75) !important;
-  box-shadow: inset 0 2px 4px rgba(244, 63, 94, 0.08), 0 0 0 1px rgba(244, 63, 94, 0.18) !important;
+  border-color: rgba(225, 29, 72, 0.96) !important;
+  background: rgba(225, 29, 72, 0.12) !important;
+  box-shadow: inset 0 2px 4px rgba(225, 29, 72, 0.1), 0 0 0 1px rgba(225, 29, 72, 0.32), 0 0 22px rgba(225, 29, 72, 0.25) !important;
+}
+.vcp-minimal-gantt .vcp-completed-task .gantt_task_line,
+.vcp-minimal-gantt .gantt_task_line.vcp-completed-task {
+  border-color: rgba(16, 185, 129, 0.82) !important;
+  border-style: dashed !important;
+  background: rgba(16, 185, 129, 0.04) !important;
+  box-shadow: inset 0 2px 4px rgba(16, 185, 129, 0.04), 0 0 0 1px rgba(16, 185, 129, 0.14), 0 0 16px rgba(16, 185, 129, 0.2) !important;
+}
+.vcp-minimal-gantt .vcp-completed-task .gantt_task_progress,
+.vcp-minimal-gantt .gantt_task_line.vcp-completed-task .gantt_task_progress {
+  border: 1px solid rgba(5, 150, 105, 0.28) !important;
+  box-sizing: border-box !important;
+  opacity: 0.86 !important;
+  box-shadow: none !important;
+}
+.vcp-minimal-gantt .vcp-completed-task .gantt_task_content span {
+  color: #047857 !important;
+  text-shadow: none !important;
 }
 .vcp-minimal-gantt .vcp-context-task {
   opacity: 0.58;

@@ -17,6 +17,16 @@ function startOfTodayTimestamp(now = Date.now()) {
     return date.getTime();
 }
 
+function startOfDayAtHour(timestamp, hour) {
+    const date = new Date(timestamp);
+    date.setHours(hour, 0, 0, 0);
+    return date.getTime();
+}
+
+function isAutoStartPeriod(period) {
+    return period === 'short_term' || period === 'long_term';
+}
+
 if (!fs.existsSync(taskDataDir)) {
     fs.mkdirSync(taskDataDir, { recursive: true });
 }
@@ -440,7 +450,8 @@ async function updateTask(id, updates) {
     const nextColumn = updates.kanban_col || existingTask.kanban_col;
     const enteringInProgress = existingTask.kanban_col !== 'in_progress' && nextColumn === 'in_progress';
     const todayTimestamp = startOfTodayTimestamp(now);
-    const nextStartedAt = Object.prototype.hasOwnProperty.call(updates, 'started_at')
+    const explicitStartedAt = Object.prototype.hasOwnProperty.call(updates, 'started_at');
+    let nextStartedAt = explicitStartedAt
         ? updates.started_at
         : enteringInProgress
             ? now
@@ -455,6 +466,15 @@ async function updateTask(id, updates) {
         : enteringInProgress
             ? todayTimestamp
             : existingTask.due_date;
+    if (!explicitStartedAt && isAutoStartPeriod(updates.period || existingTask.period) && nextPlanDate && !nextStartedAt) {
+        nextStartedAt = startOfDayAtHour(Number(nextPlanDate), 6);
+    }
+    const nextPlannedPomodoros = Object.prototype.hasOwnProperty.call(updates, 'planned_pomodoros')
+        ? updates.planned_pomodoros
+        : existingTask.planned_pomodoros;
+    const nextPlannedAmount = Object.prototype.hasOwnProperty.call(updates, 'planned_amount')
+        ? updates.planned_amount
+        : existingTask.planned_amount;
     const mergedTask = normalizeTask({
         ...existingTask,
         ...updates,
@@ -467,6 +487,16 @@ async function updateTask(id, updates) {
             : nextColumn === 'done'
                 ? (existingTask.completed_at || now)
                 : null,
+        actual_pomodoros: Object.prototype.hasOwnProperty.call(updates, 'actual_pomodoros')
+            ? updates.actual_pomodoros
+            : nextColumn === 'done'
+                ? (existingTask.actual_pomodoros || nextPlannedPomodoros || 0)
+                : existingTask.actual_pomodoros,
+        completed_amount: Object.prototype.hasOwnProperty.call(updates, 'completed_amount')
+            ? updates.completed_amount
+            : nextColumn === 'done'
+                ? (Number(nextPlannedAmount) || 0)
+                : existingTask.completed_amount,
         updated_at: now,
         version: Number(existingTask.version || 1) + 1
     });

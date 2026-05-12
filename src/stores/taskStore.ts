@@ -131,6 +131,94 @@ function startOfTodayTimestamp(now = Date.now()) {
   return date.getTime()
 }
 
+function endOfTodayTimestamp(now = Date.now()) {
+  const date = new Date(now)
+  date.setHours(23, 59, 59, 999)
+  return date.getTime()
+}
+
+function startOfDayAtHour(timestamp: number, hour: number) {
+  const date = new Date(timestamp)
+  date.setHours(hour, 0, 0, 0)
+  return date.getTime()
+}
+
+function localDateKey(timestamp = Date.now()) {
+  const date = new Date(timestamp)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function isAutoStartPeriod(period?: TaskPeriod | null) {
+  return period === 'short_term' || period === 'long_term'
+}
+
+function normalizeDayStart(timestamp: number) {
+  const date = new Date(timestamp)
+  date.setHours(0, 0, 0, 0)
+  return date.getTime()
+}
+
+function daysBetweenInclusive(start: number, end: number) {
+  const result: number[] = []
+  let cursor = normalizeDayStart(start)
+  const endDay = normalizeDayStart(end)
+  while (cursor <= endDay) {
+    result.push(cursor)
+    cursor = addDays(cursor, 1)
+  }
+  return result
+}
+
+const priorityRank: Record<TaskPriority, number> = { p0: 0, p1: 1, p2: 2, p3: 3 }
+
+function compareTasksByPriority(a: ITaskItem, b: ITaskItem) {
+  return (priorityRank[a.priority] ?? 9) - (priorityRank[b.priority] ?? 9)
+    || (a.sort_order || 0) - (b.sort_order || 0)
+    || (a.due_date || Number.MAX_SAFE_INTEGER) - (b.due_date || Number.MAX_SAFE_INTEGER)
+    || (b.updated_at || 0) - (a.updated_at || 0)
+    || (b.created_at || 0) - (a.created_at || 0)
+}
+
+const POMODORO_MINUTES = 30
+
+function roundPomodoros(value: number) {
+  return Math.round(Math.max(0, value) * 100) / 100
+}
+
+function pomodorosFromDuration(startedAt: number | null | undefined, endedAt: number) {
+  if (!startedAt || startedAt >= endedAt) return 0
+  return roundPomodoros((endedAt - startedAt) / (POMODORO_MINUTES * 60 * 1000))
+}
+
+function readAiMeta(task: Partial<ITaskItem>) {
+  if (!task.ai_meta_json) return {}
+  try {
+    const parsed = JSON.parse(task.ai_meta_json)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function writeAiMeta(task: Partial<ITaskItem>, updates: Record<string, unknown>) {
+  const nextMeta = { ...readAiMeta(task), ...updates }
+  Object.keys(nextMeta).forEach(key => {
+    if (nextMeta[key] === undefined || nextMeta[key] === null) delete nextMeta[key]
+  })
+  return Object.keys(nextMeta).length ? JSON.stringify(nextMeta) : undefined
+}
+
+function settleFocusSession(task: ITaskItem, endedAt: number) {
+  const meta = readAiMeta(task)
+  const focusStartedAt = typeof meta.focus_started_at === 'number' ? meta.focus_started_at : null
+  const elapsedPomodoros = pomodorosFromDuration(focusStartedAt, endedAt)
+  return {
+    actual_pomodoros: roundPomodoros((task.actual_pomodoros || 0) + elapsedPomodoros),
+    is_focused: false,
+    ai_meta_json: writeAiMeta(task, { focus_started_at: null })
+  }
+}
+
 export const useTaskStore = defineStore('taskStore', () => {
   const taskList = useStorage<ITaskItem[]>(STORAGE_KEYS.tasks, [])
   const inboxList = useStorage<InboxItem[]>(STORAGE_KEYS.inbox, [])
@@ -192,18 +280,20 @@ export const useTaskStore = defineStore('taskStore', () => {
   })
   const deletedTasks = computed(() => cloneTasks(taskList.value).map(normalizeTask).filter(task => task.deleted_at))
 
-  const todayTasks = computed(() => normalizedTaskList.value.filter(task => task.period === 'daily'))
-  const shortTermTasks = computed(() => normalizedTaskList.value.filter(task => task.period === 'short_term'))
-  const longTermTasks = computed(() => normalizedTaskList.value.filter(task => task.period === 'long_term'))
-  const routineTasks = computed(() => normalizedTaskList.value.filter(task => task.period === 'routine'))
+  const todayTasks = computed(() => normalizedTaskList.value.filter(task => task.period === 'daily').sort(compareTasksByPriority))
+  const shortTermTasks = computed(() => normalizedTaskList.value.filter(task => task.period === 'short_term').sort(compareTasksByPriority))
+  const longTermTasks = computed(() => normalizedTaskList.value.filter(task => task.period === 'long_term').sort(compareTasksByPriority))
+  const routineTasks = computed(() => normalizedTaskList.value
+    .filter(task => task.period === 'routine' && task.kanban_col !== 'done' && !task.started_at && (!task.plan_date || task.plan_date <= endOfTodayTimestamp()))
+    .sort(compareTasksByPriority))
   const reviewTasks = computed(() => normalizedTaskList.value.filter(task => task.is_review && !task.review_info?.completed))
   const todayReviewTasks = computed(() => reviewTasks.value.filter(task => isDueReviewTask(task)))
   const focusedTask = computed(() => normalizedTaskList.value.find(task => task.is_focused) || null)
 
   const tasksByColumn = computed<Record<KanbanColumn, ITaskItem[]>>(() => ({
-    todo: todayTasks.value.filter(task => task.kanban_col === 'todo').sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
-    in_progress: todayTasks.value.filter(task => task.kanban_col === 'in_progress').sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
-    done: todayTasks.value.filter(task => task.kanban_col === 'done').sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+    todo: todayTasks.value.filter(task => task.kanban_col === 'todo').sort(compareTasksByPriority),
+    in_progress: todayTasks.value.filter(task => task.kanban_col === 'in_progress').sort(compareTasksByPriority),
+    done: todayTasks.value.filter(task => task.kanban_col === 'done').sort(compareTasksByPriority)
   }))
 
   const tasksByPeriod = computed<Record<TaskPeriod, ITaskItem[]>>(() => ({
@@ -286,13 +376,17 @@ export const useTaskStore = defineStore('taskStore', () => {
 
   function createTask(payload: Partial<ITaskItem>) {
     const now = Date.now()
+    const period = payload.period || 'daily'
+    const planDate = Object.prototype.hasOwnProperty.call(payload, 'plan_date') ? payload.plan_date : null
+    const shouldUsePlanStart = isAutoStartPeriod(period) && planDate && !payload.started_at
     const newTask = normalizeTask({
       ...payload,
       id: payload.id || crypto.randomUUID(),
       color: payload.color || randomTaskColor(),
       kanban_col: payload.kanban_col || 'todo',
-      period: payload.period || 'daily',
+      period,
       priority: payload.priority || 'p2',
+      started_at: shouldUsePlanStart ? startOfDayAtHour(Number(planDate), 6) : payload.started_at,
       sort_order: payload.sort_order || now,
       created_at: now,
       updated_at: now,
@@ -300,6 +394,7 @@ export const useTaskStore = defineStore('taskStore', () => {
     })
     replaceTaskList([newTask, ...normalizedTaskList.value])
     syncTaskToServer(newTask)
+    if (newTask.period === 'routine') ensureRoutineInstances(newTask)
     return newTask
   }
 
@@ -323,12 +418,14 @@ export const useTaskStore = defineStore('taskStore', () => {
             ? (task.completed_at || now)
             : null
         const enteringInProgress = task.kanban_col !== 'in_progress' && nextCol === 'in_progress'
+        const leavingInProgress = task.kanban_col === 'in_progress' && nextCol !== 'in_progress'
+        const shouldSettleFocus = task.is_focused && (isCompleted || leavingInProgress || updates.is_focused === false)
+        const settledFocus = shouldSettleFocus ? settleFocusSession(task, now) : null
         const todayTimestamp = startOfTodayTimestamp(now)
-        const nextStartedAt = Object.prototype.hasOwnProperty.call(updates, 'started_at')
+        const explicitStartedAt = Object.prototype.hasOwnProperty.call(updates, 'started_at')
+        let nextStartedAt = explicitStartedAt
           ? updates.started_at
-          : enteringInProgress
-            ? now
-            : task.started_at
+          : task.started_at
         const nextPlanDate = Object.prototype.hasOwnProperty.call(updates, 'plan_date')
           ? updates.plan_date
           : enteringInProgress
@@ -339,22 +436,28 @@ export const useTaskStore = defineStore('taskStore', () => {
           : enteringInProgress
             ? todayTimestamp
             : task.due_date
+        if (!explicitStartedAt && isAutoStartPeriod(updates.period || task.period) && nextPlanDate && !nextStartedAt) {
+          nextStartedAt = startOfDayAtHour(Number(nextPlanDate), 6)
+        }
         changedTask = normalizeTask({
           ...task,
           ...updates,
+          ...settledFocus,
           plan_date: nextPlanDate,
           due_date: nextDueDate,
           started_at: nextStartedAt,
           completed_at: nextCompletedAt,
           actual_pomodoros: Object.prototype.hasOwnProperty.call(updates, 'actual_pomodoros')
             ? updates.actual_pomodoros
-            : isCompleted
-              ? (task.actual_pomodoros || nextPlannedPomodoros || 1)
-              : task.actual_pomodoros,
+            : settledFocus
+              ? settledFocus.actual_pomodoros
+              : isCompleted
+                ? roundPomodoros(task.actual_pomodoros || nextPlannedPomodoros || 0)
+                : task.actual_pomodoros,
           completed_amount: Object.prototype.hasOwnProperty.call(updates, 'completed_amount')
             ? updates.completed_amount
             : isCompleted
-              ? (task.completed_amount || nextPlannedAmount || 1)
+              ? (Number(nextPlannedAmount) || 0)
               : task.completed_amount,
           updated_at: now,
           version: (task.version || 1) + 1
@@ -362,7 +465,10 @@ export const useTaskStore = defineStore('taskStore', () => {
         return changedTask
       })
     )
-    if (changedTask) syncTaskToServer(changedTask)
+    if (changedTask) {
+      syncTaskToServer(changedTask)
+      if (changedTask.period === 'routine') ensureRoutineInstances(changedTask)
+    }
   }
 
   function removeTask(taskId: string) {
@@ -388,19 +494,24 @@ export const useTaskStore = defineStore('taskStore', () => {
       const previousTask = previousTaskMap.get(task.id)
       const enteringInProgress = previousTask?.kanban_col !== 'in_progress' && column === 'in_progress'
       const todayTimestamp = startOfTodayTimestamp(now)
-      const startedAt = task.started_at || (
-        enteringInProgress
-          ? now
-          : previousTask?.started_at
-      )
+      const leavingInProgress = previousTask?.kanban_col === 'in_progress' && column !== 'in_progress'
+      const settledFocus = previousTask?.is_focused && leavingInProgress ? settleFocusSession(previousTask, now) : null
+      const isCompleted = column === 'done'
+      const startedAt = task.started_at || previousTask?.started_at
+      const plannedPomodoros = task.planned_pomodoros ?? previousTask?.planned_pomodoros ?? 0
+      const plannedAmount = task.planned_amount ?? previousTask?.planned_amount ?? 0
 
       return normalizeTask({
         ...task,
+        ...settledFocus,
         kanban_col: column,
         period: 'daily',
         plan_date: enteringInProgress ? todayTimestamp : task.plan_date,
         due_date: enteringInProgress ? todayTimestamp : task.due_date,
         started_at: startedAt,
+        completed_at: isCompleted ? (task.completed_at || previousTask?.completed_at || now) : null,
+        actual_pomodoros: isCompleted ? roundPomodoros(task.actual_pomodoros || plannedPomodoros || 0) : task.actual_pomodoros,
+        completed_amount: isCompleted ? (Number(plannedAmount) || 0) : task.completed_amount,
         sort_order: now + index,
         updated_at: now
       })
@@ -413,17 +524,102 @@ export const useTaskStore = defineStore('taskStore', () => {
 
   function setFocusedTask(taskId: string | null) {
     const now = Date.now()
-    const nextTasks = normalizedTaskList.value.map(task => normalizeTask({
-      ...task,
-      is_focused: taskId ? task.id === taskId : false,
-      updated_at: Date.now()
-    }))
+    const changedTasks: ITaskItem[] = []
+    const nextTasks = normalizedTaskList.value.map(task => {
+      const shouldFocus = Boolean(taskId && task.id === taskId && task.kanban_col === 'in_progress')
+      const shouldSettle = task.is_focused && !shouldFocus
+      const settledFocus = shouldSettle ? settleFocusSession(task, now) : null
+      const nextTask = normalizeTask({
+        ...task,
+        ...settledFocus,
+        is_focused: shouldFocus,
+        started_at: shouldFocus ? (task.started_at || now) : task.started_at,
+        ai_meta_json: shouldFocus
+          ? writeAiMeta(task, { focus_started_at: now })
+          : settledFocus?.ai_meta_json ?? task.ai_meta_json,
+        updated_at: now
+      })
+
+      if (task.is_focused !== nextTask.is_focused || task.id === taskId || shouldSettle) {
+        changedTasks.push(nextTask)
+      }
+      return nextTask
+    })
     replaceTaskList(nextTasks)
-    nextTasks.filter(task => task.is_focused || task.updated_at === now).forEach(task => syncTaskToServer(task))
+    changedTasks.forEach(task => syncTaskToServer(task))
   }
 
   function moveTaskToPeriod(taskId: string, period: TaskPeriod) {
     updateTask(taskId, { period, kanban_col: 'todo' })
+  }
+
+  function ensureRoutineInstances(templateTask: ITaskItem) {
+    if (templateTask.period !== 'routine' || !templateTask.plan_date || !templateTask.due_date) return
+    const now = Date.now()
+    const meta = readAiMeta(templateTask)
+    const templateId = String(meta.routine_template_id || templateTask.id)
+    const existingKeys = new Set(normalizedTaskList.value
+      .filter(task => task.period === 'routine')
+      .map(task => {
+        const taskMeta = readAiMeta(task)
+        return taskMeta.routine_template_id === templateId && taskMeta.routine_date_key ? String(taskMeta.routine_date_key) : ''
+      })
+      .filter(Boolean))
+    const baseDateKey = localDateKey(templateTask.plan_date)
+    const baseTaskNeedsMeta = meta.routine_template_id !== templateId || meta.routine_date_key !== baseDateKey || !meta.routine_instance
+    const generatedTasks: ITaskItem[] = daysBetweenInclusive(templateTask.plan_date, templateTask.due_date)
+      .filter(day => !existingKeys.has(localDateKey(day)) && localDateKey(day) !== baseDateKey)
+      .map((day, index) => normalizeTask({
+        ...templateTask,
+        id: crypto.randomUUID(),
+        kanban_col: 'todo',
+        started_at: null,
+        completed_at: null,
+        plan_date: day,
+        due_date: day,
+        actual_pomodoros: 0,
+        completed_amount: 0,
+        sort_order: (templateTask.sort_order || now) + index + 1,
+        created_at: now,
+        updated_at: now,
+        version: 1,
+        ai_meta_json: writeAiMeta(templateTask, {
+          routine_template_id: templateId,
+          routine_date_key: localDateKey(day),
+          routine_instance: true
+        })
+      }))
+
+    if (!baseTaskNeedsMeta && generatedTasks.length === 0) return
+
+    const nextTasks = normalizedTaskList.value.map(task => task.id === templateTask.id
+      ? normalizeTask({
+        ...task,
+        ai_meta_json: writeAiMeta(task, {
+          routine_template_id: templateId,
+          routine_date_key: baseDateKey,
+          routine_instance: true
+        }),
+        updated_at: baseTaskNeedsMeta ? now : task.updated_at
+      })
+      : task)
+    const changedBase = nextTasks.find(task => task.id === templateTask.id)
+    replaceTaskList([...generatedTasks, ...nextTasks])
+    if (baseTaskNeedsMeta && changedBase) syncTaskToServer(changedBase)
+    generatedTasks.forEach(task => syncTaskToServer(task))
+  }
+
+  function checkInRoutineTask(taskId: string) {
+    const task = normalizedTaskList.value.find(item => item.id === taskId)
+    if (!task || task.period !== 'routine') return
+    const now = Date.now()
+    updateTask(taskId, {
+      kanban_col: 'done',
+      started_at: now,
+      completed_at: now,
+      actual_pomodoros: task.actual_pomodoros && task.actual_pomodoros > 0 ? task.actual_pomodoros : (task.planned_pomodoros || 1),
+      completed_amount: task.completed_amount && task.completed_amount > 0 ? task.completed_amount : (task.planned_amount || 1)
+    })
   }
 
   function addInboxItem(content: string) {
@@ -474,6 +670,6 @@ export const useTaskStore = defineStore('taskStore', () => {
   return {
     taskList, inboxList, isHydrated, isSyncing, currentView,
     normalizedTaskList, deletedTasks, todayTasks, shortTermTasks, longTermTasks, routineTasks, reviewTasks, todayReviewTasks, focusedTask, tasksByColumn, tasksByPeriod, insights,
-    hydrateFromServer, clearLocalCache, createBackup, createTask, updateTask, removeTask, restoreTask, moveTaskColumn, setColumnTasks, setFocusedTask, moveTaskToPeriod, addInboxItem, removeInboxItem, promoteInboxToTask, markReviewTask, syncToServer, syncToServerNow
+    hydrateFromServer, clearLocalCache, createBackup, createTask, updateTask, removeTask, restoreTask, moveTaskColumn, setColumnTasks, setFocusedTask, moveTaskToPeriod, ensureRoutineInstances, checkInRoutineTask, addInboxItem, removeInboxItem, promoteInboxToTask, markReviewTask, syncToServer, syncToServerNow
   }
 })

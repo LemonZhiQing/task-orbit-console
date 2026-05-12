@@ -1,8 +1,12 @@
 <template>
   <div class="inbox-fab-container">
+    <transition name="fade-backdrop">
+      <div v-if="isOpen" class="inbox-backdrop" @click="closeInbox"></div>
+    </transition>
+
     <!-- 抽屉部分 -->
     <transition name="fade-slide">
-      <div v-if="isOpen" class="inbox-drawer">
+      <div v-if="isOpen" class="inbox-drawer" @click.stop>
         <div class="inbox-header">
           <span>碎片缓存池</span>
           <span class="count-badge">{{ inboxList.length }}</span>
@@ -22,7 +26,10 @@
             <div class="item-content">{{ item.content }}</div>
             <div class="item-actions">
               <span class="item-time">{{ formatTime(item.created_at) }}</span>
-              <button class="btn-convert" @click="promote(item.id)">↗ 转为任务</button>
+              <div class="item-action-buttons">
+                <button class="btn-delete" type="button" title="删除碎片" @click.stop="remove(item.id)">删除</button>
+                <button class="btn-convert" type="button" @click.stop="promote(item.id)">↗ 转为任务</button>
+              </div>
             </div>
           </div>
           <div v-if="inboxList.length === 0" class="empty-inbox">
@@ -33,7 +40,7 @@
     </transition>
 
     <!-- 悬浮球本体 -->
-    <button class="fab-btn" :class="{ 'is-open': isOpen }" @click="isOpen = !isOpen">
+    <button class="fab-btn" :class="{ 'is-open': isOpen }" @click.stop="toggleInbox">
       <svg v-if="!isOpen" viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
       <svg v-else viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
     </button>
@@ -56,8 +63,20 @@ const handleEnter = () => {
   }
 }
 
+const toggleInbox = () => {
+  isOpen.value = !isOpen.value
+}
+
+const closeInbox = () => {
+  isOpen.value = false
+}
+
 const promote = (id: string) => {
   store.promoteInboxToTask(id)
+}
+
+const remove = (id: string) => {
+  store.removeInboxItem(id)
 }
 
 const formatTime = (ts: number) => {
@@ -72,14 +91,25 @@ const formatTime = (ts: number) => {
   bottom: 32px;
   right: 32px;
   z-index: 999;
+  pointer-events: none;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 16px;
 }
 
+.inbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: transparent;
+  pointer-events: auto;
+}
+
 /* 🎨 色彩统一：融入护眼青色主题 */
 .fab-btn {
+  position: relative;
+  z-index: 2;
   width: 56px;
   height: 56px;
   border-radius: 28px;
@@ -88,6 +118,7 @@ const formatTime = (ts: number) => {
   border: none;
   box-shadow: 0 4px 12px rgba(74, 157, 154, 0.4);
   cursor: pointer;
+  pointer-events: auto;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -104,6 +135,8 @@ const formatTime = (ts: number) => {
 }
 
 .inbox-drawer {
+  position: relative;
+  z-index: 2;
   width: 320px;
   background: var(--vcp-bg-card, #FFFFFF);
   border-radius: 16px;
@@ -112,6 +145,7 @@ const formatTime = (ts: number) => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  pointer-events: auto;
 }
 
 .inbox-header {
@@ -176,11 +210,19 @@ const formatTime = (ts: number) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
+}
+
+.item-action-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .item-time {
   font-size: 11px;
   color: var(--vcp-text-sub);
 }
+.btn-delete,
 .btn-convert {
   font-size: 11px;
   font-weight: 600;
@@ -192,6 +234,16 @@ const formatTime = (ts: number) => {
   cursor: pointer;
   transition: all 0.2s;
 }
+.btn-delete {
+  color: #E11D48;
+  background: rgba(225, 29, 72, 0.08);
+}
+
+.btn-delete:hover {
+  background: #E11D48;
+  color: white;
+}
+
 .btn-convert:hover {
   background: var(--color-primary, #4A9D9A);
   color: white;
@@ -202,6 +254,15 @@ const formatTime = (ts: number) => {
   text-align: center;
   color: var(--vcp-text-sub);
   font-size: 13px;
+}
+
+.fade-backdrop-enter-active,
+.fade-backdrop-leave-active {
+  transition: opacity 0.18s ease;
+}
+.fade-backdrop-enter-from,
+.fade-backdrop-leave-to {
+  opacity: 0;
 }
 
 .fade-slide-enter-active, .fade-slide-leave-active {

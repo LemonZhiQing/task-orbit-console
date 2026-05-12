@@ -99,7 +99,7 @@ const onDragChange = (col: KanbanColumn) => {
 .count { margin-left: 10px; color: var(--vcp-text-sub); font-size: 12px; font-weight: 500; background: rgba(62, 58, 54, 0.08); padding: 2px 8px; border-radius: 12px; }
 .ghost-add-btn { background: transparent; border: none; color: var(--vcp-text-sub); cursor: pointer; width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; }
 .ghost-add-btn:hover { background: rgba(62, 58, 54, 0.08); color: var(--vcp-text-main); }
-.task-list { flex: 1; padding: 0 20px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; min-height: 120px; }
+.task-list { flex: 1; padding: 10px 20px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; min-height: 120px; scroll-padding-top: 10px; }
 .task-list::-webkit-scrollbar { width: 4px !important; background: transparent !important; }
 .task-list::-webkit-scrollbar-thumb { background: transparent !important; border-radius: 4px !important; transition: background 0.3s !important; }
 .kanban-column:hover .task-list::-webkit-scrollbar-thumb { background: rgba(62, 58, 54, 0.1) !important; }

@@ -329,7 +329,6 @@ const togglePanel = () => {
 
 const openDetail = (taskId: string) => {
   selectedTaskId.value = null
-  isPanelOpen.value = false
   requestAnimationFrame(() => {
     selectedTaskId.value = taskId
     isDrawerOpen.value = true

@@ -304,9 +304,11 @@ const childTasks = computed(() => {
   return store.normalizedTaskList
     .filter(item => !item.deleted_at && item.id !== task.value?.id && (item.parent_id === task.value?.id || item.project === task.value?.id))
     .sort((a, b) => {
+      const priorityWeight: Record<string, number> = { p0: 0, p1: 1, p2: 2, p3: 3 }
       const periodWeight: Record<string, number> = { short_term: 0, daily: 1, routine: 2, long_term: 3 }
       const columnWeight: Record<string, number> = { in_progress: 0, todo: 1, done: 2 }
-      return (periodWeight[a.period] ?? 9) - (periodWeight[b.period] ?? 9)
+      return (priorityWeight[a.priority] ?? 9) - (priorityWeight[b.priority] ?? 9)
+        || (periodWeight[a.period] ?? 9) - (periodWeight[b.period] ?? 9)
         || (columnWeight[a.kanban_col] ?? 9) - (columnWeight[b.kanban_col] ?? 9)
         || (a.sort_order || 0) - (b.sort_order || 0)
     })
@@ -471,6 +473,9 @@ const saveTask = () => {
   }
 
   store.updateTask(task.value.id, task.value)
+  if (task.value.period === 'routine') {
+    store.ensureRoutineInstances(task.value)
+  }
 }
 
 const handleDelete = () => {

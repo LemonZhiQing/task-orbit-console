@@ -116,7 +116,7 @@ onMounted(() => {
   });
 })
 
-const getPreciseScaleRange = () => {
+const getPreciseScaleRange = (tasksData = props.tasks) => {
   const anchor = new Date(props.anchorDate || Date.now());
   const start = new Date(anchor);
   const end = new Date(anchor);
@@ -151,6 +151,16 @@ const getPreciseScaleRange = () => {
     end.setDate(end.getDate() + 15);
   }
 
+  const taskDates = Array.isArray(tasksData?.data)
+    ? tasksData.data.flatMap(task => [task.start_date, task.end_date]).filter(Boolean).map(value => new Date(value))
+    : [];
+  const latestTaskDate = taskDates.reduce((latest, date) => date > latest ? date : latest, end);
+
+  if (latestTaskDate > end) {
+    end.setTime(latestTaskDate.getTime());
+    end.setHours(end.getHours() + 1, 0, 0, 0);
+  }
+
   return { start, end };
 }
 
@@ -159,7 +169,7 @@ const updateGanttDataAndScale = (tasksData) => {
   if (!ganttContainer.value) return;
 
   gantt.clearAll();
-  const scaleRange = getPreciseScaleRange();
+  const scaleRange = getPreciseScaleRange(tasksData);
   gantt.config.start_date = scaleRange.start;
   gantt.config.end_date = scaleRange.end;
   
@@ -223,6 +233,22 @@ onUnmounted(() => {
 
 <style>
 .vcp-minimal-gantt.gantt-container { width: 100%; height: 100%; border: none !important; border-radius: 12px; background: var(--vcp-bg-card, #FFFFFF); }
+.vcp-minimal-gantt .gantt_hor_scroll,
+.vcp-minimal-gantt .gantt_hor_scroll .gantt_hor_scroll_wrapper {
+  height: 12px !important;
+}
+.vcp-minimal-gantt .gantt_hor_scroll {
+  background: rgba(62, 58, 54, 0.04) !important;
+}
+.vcp-minimal-gantt .gantt_hor_scroll::-webkit-scrollbar,
+.vcp-minimal-gantt .gantt_layout_cell::-webkit-scrollbar {
+  height: 10px !important;
+}
+.vcp-minimal-gantt .gantt_hor_scroll::-webkit-scrollbar-thumb,
+.vcp-minimal-gantt .gantt_layout_cell::-webkit-scrollbar-thumb {
+  background: rgba(74, 157, 154, 0.36) !important;
+  border-radius: 999px !important;
+}
 .vcp-minimal-gantt .gantt_grid_scale { border-bottom: 1px solid rgba(62, 58, 54, 0.08) !important; background: var(--vcp-bg-column, #F5F4EE) !important; color: var(--vcp-text-sub) !important; font-weight: 600; }
 .vcp-minimal-gantt .gantt_grid_data { border-right: 1px solid rgba(62, 58, 54, 0.08) !important; }
 .vcp-minimal-gantt .gantt_row { border-bottom: 1px dashed rgba(62, 58, 54, 0.05) !important; transition: background 0.2s;}

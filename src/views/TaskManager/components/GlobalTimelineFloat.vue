@@ -50,6 +50,7 @@
 
                     <el-switch v-model="showCompletedTasks" size="small" active-text="显示已完成" class="completed-switch" />
                     <el-switch v-model="keepParentContext" size="small" active-text="保留父级上下文" class="completed-switch" />
+                    <el-switch v-model="showRoutineTasks" size="small" active-text="显示常驻" class="completed-switch" />
                   </div>
                 </div>
 
@@ -149,6 +150,7 @@ const radarRangeKey = ref('view_window')
 const radarSearch = ref('')
 const showCompletedTasks = ref(false)
 const keepParentContext = ref(true)
+const showRoutineTasks = ref(false)
 
 const hasScheduleDate = (task: ITaskItem) => Boolean(task.started_at || task.plan_date || task.due_date)
 const hasMeaningfulTitle = (task: ITaskItem) => Boolean(task.title?.trim()) && task.title.trim() !== '未命名任务'
@@ -168,6 +170,7 @@ const activeFilterSummary = computed(() => {
   if (radarSearch.value.trim()) parts.push('搜索')
   if (!showCompletedTasks.value) parts.push('隐藏已完成')
   if (keepParentContext.value) parts.push('父级上下文')
+  if (!showRoutineTasks.value) parts.push('隐藏常驻')
   return parts.length ? `已启用：${parts.join(' / ')}` : '未启用额外筛选'
 })
 
@@ -262,6 +265,10 @@ const applyRadarFilters = (tasks: ITaskItem[]) => {
 
   filtered = filtered.filter(intersectsRadarRange).filter(matchesSearch)
 
+  if (!showRoutineTasks.value) {
+    filtered = filtered.filter(t => t.period !== 'routine')
+  }
+
   if (!showCompletedTasks.value) {
     filtered = filtered.filter(t => !isTaskDone(t))
   }
@@ -303,15 +310,23 @@ const contextTaskCount = computed(() => Math.max(0, scheduledTasks.value.length 
 const unscheduledTasks = computed(() => store.normalizedTaskList.filter(t => !hasScheduleDate(t) || !hasMeaningfulTitle(t)))
 
 const buildTaskDateRange = (task: ITaskItem) => {
-  const startBase = task.started_at || task.plan_date || task.due_date
+  const startBase = task.period === 'routine' && task.started_at
+    ? task.started_at
+    : task.started_at || task.plan_date || task.due_date
   if (!startBase) return null
 
   const startDate = new Date(startBase)
   const plannedPomodoros = getPlannedPomodoros(task)
-  let endDate = new Date(task.due_date || task.plan_date || startBase)
+  const actualPomodoros = getActualPomodoros(task)
+  const durationPomodoros = task.period === 'routine' && task.started_at
+    ? actualPomodoros
+    : isTaskDone(task) && actualPomodoros > 0
+      ? actualPomodoros
+      : plannedPomodoros
+  let endDate = new Date(task.period === 'routine' && task.started_at ? startBase : task.due_date || task.plan_date || startBase)
 
-  if (plannedPomodoros > 0) {
-    endDate = new Date(startDate.getTime() + plannedPomodoros * POMODORO_MINUTES * 60 * 1000)
+  if (durationPomodoros > 0) {
+    endDate = new Date(startDate.getTime() + durationPomodoros * POMODORO_MINUTES * 60 * 1000)
   } else if (endDate.getTime() <= startDate.getTime()) {
     const padding = task.period === 'daily' ? 2 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000
     endDate = new Date(startDate.getTime() + padding)
@@ -321,15 +336,16 @@ const buildTaskDateRange = (task: ITaskItem) => {
 }
 
 const taskProgress = (task: ITaskItem) => {
+  if (task.kanban_col === 'done') return 1
   const actualPomodoros = getActualPomodoros(task)
   const plannedPomodoros = getPlannedPomodoros(task)
   if (plannedPomodoros > 0) return Math.min(1, actualPomodoros / plannedPomodoros)
-  if (task.kanban_col === 'done') return 1
   if (task.kanban_col === 'in_progress') return 0.5
   return 0
 }
 
 const taskDisplayProgress = (task: ITaskItem) => {
+  if (task.kanban_col === 'done') return 1
   const completedAmount = task.effective_completed_amount ?? task.completed_amount ?? 0
   if (task.planned_amount && task.planned_amount > 0) return Math.min(1, completedAmount / task.planned_amount)
   return taskProgress(task)

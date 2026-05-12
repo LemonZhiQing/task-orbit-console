@@ -92,12 +92,11 @@
           </button>
         </div>
         <div class="pool-list">
-          <TaskCard 
-            v-for="task in shortTermTasks" 
-            :key="task.id" 
-            :task="task" 
+          <TaskCard
+            v-for="task in shortTermTasks"
+            :key="task.id"
+            :task="task"
             @click="openDetail(task.id)"
-            @promote="promoteToDaily(task.id)" 
           />
           <div v-if="shortTermTasks.length === 0" class="empty-state">暂无短期任务</div>   
         </div>
@@ -115,12 +114,11 @@
           </button>
         </div>
         <div class="pool-list">
-          <TaskCard 
-            v-for="task in longTermTasks" 
-            :key="task.id" 
-            :task="task" 
+          <TaskCard
+            v-for="task in longTermTasks"
+            :key="task.id"
+            :task="task"
             @click="openDetail(task.id)"
-            @promote="promoteToDaily(task.id)" 
           />
           <div v-if="longTermTasks.length === 0" class="empty-state">暂无长期宏图</div>   
         </div>
@@ -138,12 +136,12 @@
           </button>
         </div>
         <div class="pool-list">
-          <TaskCard 
-            v-for="task in routineTasks" 
-            :key="task.id" 
-            :task="task" 
+          <TaskCard
+            v-for="task in routineTasks"
+            :key="task.id"
+            :task="task"
             @click="openDetail(task.id)"
-            @promote="promoteToDaily(task.id)" 
+            @checkin="checkInRoutine"
           />
           <div v-if="routineTasks.length === 0" class="empty-state">暂无常驻习惯</div>     
         </div>
@@ -170,10 +168,8 @@ const shortTermTasks = computed(() => store.shortTermTasks)
 const longTermTasks = computed(() => store.longTermTasks)
 const routineTasks = computed(() => store.routineTasks)
 
-const promoteToDaily = (taskId: string) => {
-  if (store.moveTaskToPeriod) {
-    store.moveTaskToPeriod(taskId, 'daily')
-  }
+const checkInRoutine = (taskId: string) => {
+  store.checkInRoutineTask(taskId)
 }
 
 const isDrawerOpen = ref(false)
@@ -189,6 +185,7 @@ const quickAdd = (periodType: string) => {
   if (now.getHours() >= 21) {
     defaultDate.setDate(defaultDate.getDate() + 1)
   }
+  defaultDate.setHours(0, 0, 0, 0)
   
   const timestamp = defaultDate.getTime()
 
